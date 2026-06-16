@@ -28,13 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
-import com.gwstreams.app.data.repo.WatchItem
 
-// Project Data & State Models Imports
-import com.gwstreams.app.data.models.ContentItem
-import com.gwstreams.app.data.models.Tab
-import com.gwstreams.app.data.models.LiveView
-import com.gwstreams.app.ui.home.HomeUiState
+// Project Data & Package Imports
+import com.gwstreams.app.data.*
+import com.gwstreams.app.data.model.*
+import com.gwstreams.app.data.repo.*
 
 // Project Components & UI Core
 import com.gwstreams.app.ui.components.*
