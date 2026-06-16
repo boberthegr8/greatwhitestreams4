@@ -1,4 +1,3 @@
-import androidx.compose.foundation.lazy.rememberLazyListState
 package com.gwstreams.app.ui.home
 
 import androidx.compose.foundation.background
@@ -12,11 +11,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +29,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.gwstreams.app.data.repo.WatchItem
+
+// Project Data & State Models Imports
+import com.gwstreams.app.data.models.ContentItem
+import com.gwstreams.app.data.models.Tab
+import com.gwstreams.app.data.models.LiveView
+import com.gwstreams.app.ui.home.HomeUiState
+
+// Project Components & UI Core
 import com.gwstreams.app.ui.components.*
 import com.gwstreams.app.ui.theme.*
 import kotlinx.coroutines.delay
