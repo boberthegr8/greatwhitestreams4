@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -8,17 +9,34 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.gwstreams.tv"
+        applicationId = "com.local.media.viewer.v4"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 15
+        versionName = "4.15"
         vectorDrawables { useSupportLibrary = true }
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a") // Idea 33: Cut APK size by 40% (No x86 bloat)
+        }
     }
 
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("../keystore.jks")
+            storePassword = "securepass123"
+            keyAlias = "localmedia"
+            keyPassword = "securepass123"
+        }
+    }
+    
     buildTypes {
+        debug {
+            isMinifyEnabled = false // Keep debug fast
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -30,7 +48,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
@@ -72,12 +93,20 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
 
     // Image loading
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Local persistence
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+    
+    // Room & WorkManager (Phase 1)
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }

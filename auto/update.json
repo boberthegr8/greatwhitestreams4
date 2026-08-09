@@ -1,0 +1,8 @@
+{
+  "versionCode": 15,
+  "versionName": "4.15",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.15-autoupdate.apk",
+  "releaseNotes": "GitHub self-updater added. The app now checks Rob's GitHub update manifest on startup/login, downloads APK updates, opens the Android installer, and routes Firestick users to the required 'Install unknown apps' setting the first time.",
+  "mandatory": false,
+  "sha256": "bab091e2663adea3c6d24c855ffdda718272a172fae4e8201b8bc14a338748be"
+}
