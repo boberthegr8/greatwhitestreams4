@@ -1,8 +1,8 @@
 {
-  "versionCode": 15,
-  "versionName": "4.15",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.15-autoupdate.apk",
-  "releaseNotes": "GitHub self-updater added. The app now checks Rob's GitHub update manifest on startup/login, downloads APK updates, opens the Android installer, and routes Firestick users to the required 'Install unknown apps' setting the first time.",
+  "versionCode": 16,
+  "versionName": "4.16",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.16-settings-dpad-back.apk",
+  "releaseNotes": "Adds Settings > Check for updates, fixes player D-pad controls for rewind/fast-forward while keeping previous-channel thumbnails, and fixes Back navigation from series/seasons/details so it stays inside the app instead of dumping to Google TV home.",
   "mandatory": false,
-  "sha256": "bab091e2663adea3c6d24c855ffdda718272a172fae4e8201b8bc14a338748be"
+  "sha256": "1b9127facb0bc138156374fd7904f5e9501518bb706fec91e38290571eb3c33a"
 }

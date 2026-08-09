@@ -36,7 +36,7 @@ object Updater {
         val sha256: String?
     )
 
-    suspend fun checkForUpdate(currentVersionCode: Int): UpdateInfo? = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdateResult(currentVersionCode: Int): Result<UpdateInfo?> = withContext(Dispatchers.IO) {
         runCatching {
             val connection = openConnection(UPDATE_JSON_URL, "application/json")
 
@@ -71,8 +71,11 @@ object Updater {
             } finally {
                 connection.disconnect()
             }
-        }.getOrNull()
+        }
     }
+
+    suspend fun checkForUpdate(currentVersionCode: Int): UpdateInfo? =
+        checkForUpdateResult(currentVersionCode).getOrNull()
 
     fun canInstallPackages(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
