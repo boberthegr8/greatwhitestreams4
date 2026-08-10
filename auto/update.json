@@ -1,8 +1,8 @@
 {
-  "versionCode": 25,
-  "versionName": "4.25",
+  "versionCode": 26,
+  "versionName": "4.26 Stable Edition",
   "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
-  "releaseNotes": "Stability build: fixes playback hard crash by adding WAKE_LOCK permission, restores editable DNS/server URL for every provider preset, prevents Search from stealing playback/navigation focus, and adds Phone / QR setup so clients can enter DNS, username, and password from a phone on the same LAN. QR setup does not send saved credentials to the phone page.",
+  "releaseNotes": "Stable edition hardening: protects startup from corrupted local Room/DataStore reads, prevents crash-restart recovery from throwing exact-alarm errors, keeps each provider DNS/server URL authoritative instead of applying a broken global DNS override, hardens Phone / QR setup with a one-time tokenized pairing URL, and tightens TV focus restoration after dialogs/text-field Back. Update is mandatory and appears on app open.",
   "mandatory": true,
-  "sha256": "933eca1e950cbd1c57d06f5ec46d42d3a904c1a5ffeb3036b9ccb07fa9896d5c"
+  "sha256": "285b305018d9ad8186f5165db05415eafa9d3914b8758e3b5b3164e37b7dffa1"
 }
