@@ -1,8 +1,28 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
+
+val signingProperties = Properties().apply {
+    val signingFile = rootProject.file("signing.properties")
+    if (signingFile.exists()) {
+        signingFile.inputStream().use(::load)
+    }
+}
+
+fun signingValue(key: String): String? =
+    signingProperties.getProperty(key)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(key)?.takeIf { it.isNotBlank() }
+
+val hasReleaseSigning = listOf(
+    "RELEASE_STORE_FILE",
+    "RELEASE_STORE_PASSWORD",
+    "RELEASE_KEY_ALIAS",
+    "RELEASE_KEY_PASSWORD"
+).all { signingValue(it) != null }
 
 android {
     namespace = "com.gwstreams.tv"
@@ -12,8 +32,8 @@ android {
         applicationId = "com.local.media.viewer.v4"
         minSdk = 24
         targetSdk = 34
-        versionCode = 27
-        versionName = "4.27"
+        versionCode = 28
+        versionName = "4.28"
         vectorDrawables { useSupportLibrary = true }
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a") // Idea 33: Cut APK size by 40% (No x86 bloat)
@@ -22,11 +42,13 @@ android {
 
 
     signingConfigs {
-        create("release") {
-            storeFile = file("../keystore.jks")
-            storePassword = "securepass123"
-            keyAlias = "localmedia"
-            keyPassword = "securepass123"
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(signingValue("RELEASE_STORE_FILE")!!)
+                storePassword = signingValue("RELEASE_STORE_PASSWORD")
+                keyAlias = signingValue("RELEASE_KEY_ALIAS")
+                keyPassword = signingValue("RELEASE_KEY_PASSWORD")
+            }
         }
     }
     
@@ -36,7 +58,9 @@ android {
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

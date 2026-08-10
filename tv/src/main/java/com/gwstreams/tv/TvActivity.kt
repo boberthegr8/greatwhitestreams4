@@ -6,6 +6,8 @@ import android.net.Network
 import android.net.NetworkRequest
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -272,6 +274,13 @@ class TvActivity : ComponentActivity() {
         } ?: android.content.Intent(this, TvActivity::class.java).apply {
             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }
+
+        runCatching {
+            Handler(Looper.getMainLooper()).post {
+                runCatching { applicationContext.startActivity(launchIntent) }
+            }
+        }
+
         val pendingIntent = android.app.PendingIntent.getActivity(
             this,
             1001,
@@ -288,15 +297,7 @@ class TvActivity : ComponentActivity() {
                 pendingIntent
             )
         } catch (_: Exception) {
-            try {
-                alarmManager?.set(
-                    android.app.AlarmManager.RTC,
-                    triggerAtMillis,
-                    pendingIntent
-                )
-            } catch (_: Exception) {
-                // Never crash the crash handler while attempting a best-effort restart.
-            }
+            // Never crash the crash handler while attempting a best-effort restart.
         }
     }
 
