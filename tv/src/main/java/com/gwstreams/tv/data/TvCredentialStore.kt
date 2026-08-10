@@ -13,12 +13,25 @@ class TvCredentialStore(private val context: Context) {
     private val kHost = stringPreferencesKey("host")
     private val kUser = stringPreferencesKey("user")
     private val kPass = stringPreferencesKey("pass")
+    private val kProvider = stringPreferencesKey("provider")
 
-    data class Creds(val host: String, val user: String, val pass: String)
+    data class Creds(
+        val host: String,
+        val user: String,
+        val pass: String,
+        val provider: String? = null
+    )
 
-    suspend fun save(host: String, user: String, pass: String) {
+    suspend fun save(host: String, user: String, pass: String, provider: String? = null) {
         context.tvCreds.edit {
-            it[kHost] = host; it[kUser] = user; it[kPass] = pass
+            it[kHost] = host
+            it[kUser] = user
+            it[kPass] = pass
+            if (provider.isNullOrBlank()) {
+                it.remove(kProvider)
+            } else {
+                it[kProvider] = provider
+            }
         }
     }
 
@@ -27,7 +40,12 @@ class TvCredentialStore(private val context: Context) {
         val host = p[kHost] ?: return null
         val user = p[kUser] ?: return null
         val pass = p[kPass] ?: return null
-        return Creds(host, user, pass)
+        return Creds(
+            host = host,
+            user = user,
+            pass = pass,
+            provider = p[kProvider]
+        )
     }
 
     suspend fun clear() {

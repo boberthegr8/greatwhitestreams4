@@ -59,6 +59,7 @@ data class TvUiState(
     val savedHost: String = "",
     val savedUser: String = "",
     val savedPass: String = "",
+    val savedProvider: String? = null,
     val seriesInfo: SeriesInfoResponse? = null,
     val appUpdate: AppUpdateState = AppUpdateState(),
     val lastPlayedChannelId: Int? = null,
@@ -112,7 +113,10 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             // and attempt a silent auto-login so the app stays signed in.
             creds.load()?.let { c ->
                 _state.value = _state.value.copy(
-                    savedHost = c.host, savedUser = c.user, savedPass = c.pass
+                    savedHost = c.host,
+                    savedUser = c.user,
+                    savedPass = c.pass,
+                    savedProvider = c.provider
                 )
                 attemptAutoLogin(c)
             }
@@ -136,7 +140,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             val result = repo.login(finalHost, c.user, c.pass)
             result.fold(
                 onSuccess = {
-                    if (finalHost != c.host) creds.save(repo.normalizeHost(finalHost), c.user, c.pass)
+                    if (finalHost != c.host) creds.save(repo.normalizeHost(finalHost), c.user, c.pass, c.provider)
                     _state.value = _state.value.copy(autoLoggingIn = false, loggedIn = true)
                     selectSection(TvSection.LIVE)
                     if (_state.value.settings.autoFetchEpg) {
@@ -263,7 +267,14 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun login(host: String, user: String, pass: String, remember: Boolean, onResult: (Boolean, String?) -> Unit) {
+    fun login(
+        host: String,
+        user: String,
+        pass: String,
+        remember: Boolean,
+        provider: String? = null,
+        onResult: (Boolean, String?) -> Unit
+    ) {
         _state.value = _state.value.copy(loading = true, error = null)
         viewModelScope.launch {
             // Check killswitch on manual login too
@@ -278,7 +289,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             val result = repo.login(finalHost, user, pass)
             result.fold(
                 onSuccess = {
-                    if (remember) creds.save(repo.normalizeHost(finalHost), user, pass)
+                    if (remember) creds.save(repo.normalizeHost(finalHost), user, pass, provider)
                     _state.value = _state.value.copy(loading = false, loggedIn = true)
                     selectSection(TvSection.LIVE)
                     if (_state.value.settings.autoFetchEpg) {

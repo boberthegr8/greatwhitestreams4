@@ -92,6 +92,7 @@ class TvActivity : ComponentActivity() {
                         var isIdle by remember { mutableStateOf(false) }
                         var screen by remember { mutableStateOf<TvScreen>(TvScreen.Login) }
                         var playerReturnScreen by remember { mutableStateOf<TvScreen>(TvScreen.Browse) }
+                        var playerReturnSection by remember { mutableStateOf(TvSection.LIVE) }
 
                         LaunchedEffect(Unit) {
                             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -199,6 +200,7 @@ class TvActivity : ComponentActivity() {
                                                     screen = TvScreen.SeriesDetails(it)
                                                 } else {
                                                     playerReturnScreen = TvScreen.Browse
+                                                    playerReturnSection = state.section
                                                     screen = TvScreen.Player(it)
                                                 }
                                             }
@@ -225,7 +227,12 @@ class TvActivity : ComponentActivity() {
                                         items = state.items,
                                         bufferSeconds = state.settings.bufferSeconds,
                                         isFavorite = activeScreen.item.id in state.favorites,
-                                        onBack = { screen = playerReturnScreen },
+                                        onBack = {
+                                            if (state.section != playerReturnSection) {
+                                                vm.selectSection(playerReturnSection)
+                                            }
+                                            screen = playerReturnScreen
+                                        },
                                         onZap = { nextItem ->
                                             if (nextItem != null) {
                                                 vm.onPlayItem(nextItem)

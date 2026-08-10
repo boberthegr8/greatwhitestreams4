@@ -3,6 +3,7 @@
 package com.gwstreams.tv.ui.live
 
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,17 +26,21 @@ import androidx.compose.material.icons.filled.Search
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -59,6 +64,14 @@ import com.gwstreams.tv.ui.theme.*
  *   Left panel: section switch, search, category list (vertical)
  *   Right panel: channel rows with a horizontally-scrolling Now/Next/Later guide
  */
+private val BrowseSections = listOf(
+    TvSection.LIVE,
+    TvSection.MOVIES,
+    TvSection.SERIES,
+    TvSection.SEARCH,
+    TvSection.SETTINGS
+)
+
 @Composable
 fun TvLiveScreen(
     vm: TvViewModel,
@@ -68,6 +81,23 @@ fun TvLiveScreen(
     val state by vm.state.collectAsState()
     var bgStreamUrl by remember { mutableStateOf("") }
     var bgIsLive by remember { mutableStateOf(true) }
+    var previousBrowseSection by rememberSaveable { mutableStateOf(TvSection.LIVE) }
+    var showSearchDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.section) {
+        when (state.section) {
+            TvSection.LIVE, TvSection.MOVIES, TvSection.SERIES -> previousBrowseSection = state.section
+            TvSection.SEARCH -> showSearchDialog = true
+            else -> Unit
+        }
+        if (state.section != TvSection.SEARCH) {
+            showSearchDialog = false
+        }
+    }
+
+    BackHandler(enabled = state.section == TvSection.SEARCH) {
+        vm.selectSection(previousBrowseSection)
+    }
 
     Row(Modifier.fillMaxSize().background(Color(0xFF0F1115))) {
         // StartupShow Collapsible Left Sidebar
@@ -76,9 +106,9 @@ fun TvLiveScreen(
             onSection = vm::selectSection,
             momMode = state.settings.momMode
         )
-        
+
         Box(modifier = Modifier.fillMaxSize()) {
-            
+
             // Content Layer (Categories + Guide)
             Row(Modifier.fillMaxSize().padding(top = 16.dp, end = 16.dp)) {
                 if (state.section != TvSection.SEARCH && state.section != TvSection.SETTINGS) {
@@ -121,14 +151,20 @@ fun TvLiveScreen(
                                     }
                                 }
                             }
-                            
+
                             Box(Modifier.weight(1f)) {
                                 GuideGrid(
                                     items = state.items,
                                     state = state,
                                     nowSec = nowSec,
-                                    onPlay = onPlay,
+                                    onPlay = { item ->
+                                        if (state.section == TvSection.SEARCH) {
+                                            vm.selectSection(previousBrowseSection)
+                                        }
+                                        onPlay(item)
+                                    },
                                     onQuery = vm::onQuery,
+                                    onOpenSearch = { showSearchDialog = true },
                                     onFocus = {
                                         bgIsLive = it.section == TvSection.LIVE
                                         if (it.section == TvSection.LIVE) {
@@ -141,6 +177,14 @@ fun TvLiveScreen(
                         }
                     }
                 }
+            }
+
+            if (state.section == TvSection.SEARCH && showSearchDialog) {
+                SearchQueryDialog(
+                    query = state.query,
+                    onQuery = vm::onQuery,
+                    onDismiss = { vm.selectSection(previousBrowseSection) }
+                )
             }
         }
     }
@@ -163,7 +207,7 @@ private fun SectionNavPane(
             .onFocusChanged { hasFocus = it.hasFocus }
             .padding(vertical = 16.dp)
     ) {
-        TvSection.values().forEach { section ->
+        BrowseSections.forEach { section ->
             if (momMode && (section == TvSection.MOVIES || section == TvSection.SERIES)) return@forEach
             SectionRow(
                 section = section,
@@ -268,31 +312,31 @@ private fun GuideGrid(
     nowSec: Long,
     onPlay: (TvContentItem) -> Unit,
     onQuery: (String) -> Unit,
+    onOpenSearch: () -> Unit,
     onFocus: (TvContentItem) -> Unit = {}
 ) {
     if (state.section == TvSection.SEARCH) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
-            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = onQuery,
-                leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextLow) },
-                placeholder = { Text("Search channels, movies, series...", color = TextLow) },
-                singleLine = true,
+            Surface(
+                onClick = onOpenSearch,
+                color = Surface2,
                 shape = RoundedCornerShape(10.dp),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Aqua,
-                    unfocusedBorderColor = SurfaceHi,
-                    focusedContainerColor = Surface2,
-                    unfocusedContainerColor = Surface2,
-                    cursorColor = Aqua,
-                    focusedTextColor = TextHi,
-                    unfocusedTextColor = TextHi
-                ),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-            )
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Search, null, tint = TextLow)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        if (state.query.isBlank()) "Open search keyboard"
+                        else "Search: ${state.query}",
+                        color = TextHi,
+                        style = TvType.bodyMedium
+                    )
+                }
+            }
             
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (state.loading) {
@@ -379,6 +423,74 @@ private fun GuideGrid(
             )
         }
     }
+    }
+}
+
+@Composable
+private fun SearchQueryDialog(
+    query: String,
+    onQuery: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val textRequester = remember { FocusRequester() }
+    val closeRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(75)
+        textRequester.requestFocus()
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = SurfaceHi,
+            modifier = Modifier.width(640.dp)
+        ) {
+            Column(Modifier.padding(24.dp)) {
+                Text("Search", style = TvType.headlineMedium, color = TextHi)
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQuery,
+                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextLow) },
+                    placeholder = { Text("Search channels, movies, series...", color = TextLow) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { closeRequester.requestFocus() }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Aqua,
+                        unfocusedBorderColor = SurfaceHi,
+                        focusedContainerColor = Surface2,
+                        unfocusedContainerColor = Surface2,
+                        cursorColor = Aqua,
+                        focusedTextColor = TextHi,
+                        unfocusedTextColor = TextHi
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(textRequester)
+                        .onPreviewKeyEvent { event ->
+                            if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                                closeRequester.requestFocus()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                )
+                Spacer(Modifier.height(18.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = Surface1, contentColor = TextHi),
+                        modifier = Modifier.focusRequester(closeRequester)
+                    ) {
+                        Text("Close")
+                    }
+                }
+            }
+        }
     }
 }
 

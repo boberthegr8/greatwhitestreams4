@@ -1,25 +1,51 @@
 package com.gwstreams.tv.ui.live
 
 import android.view.KeyEvent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -33,14 +59,23 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.gwstreams.tv.data.CrashReporter
 import com.gwstreams.tv.data.Updater
 import com.gwstreams.tv.ui.TvViewModel
-import com.gwstreams.tv.ui.theme.*
+import com.gwstreams.tv.ui.theme.Aqua
+import com.gwstreams.tv.ui.theme.Coral
+import com.gwstreams.tv.ui.theme.Midnight
+import com.gwstreams.tv.ui.theme.Surface1
+import com.gwstreams.tv.ui.theme.SurfaceHi
+import com.gwstreams.tv.ui.theme.TextHi
+import com.gwstreams.tv.ui.theme.TextLow
+import com.gwstreams.tv.ui.theme.TextMid
+import com.gwstreams.tv.ui.theme.TvType
 
 private val DialogFocusDelayMs = 75L
 
-enum class Provider(val displayName: String, val defaultHost: String, val showHostField: Boolean) {
+internal enum class Provider(val displayName: String, val defaultHost: String, val showHostField: Boolean) {
     CCTV("CCTV", "http://cvapp.tv:8000", false),
     RUBY("Ruby", "http://ruby.iptv:80", false),
     HUSH("HUSH", "http://hush.iptv:80", false),
@@ -55,57 +90,63 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
     val context = LocalContext.current
 
     var selectedProvider by remember { mutableStateOf(Provider.BOBERT) }
-    var customHost by remember { mutableStateOf("") }
+    var hostInput by remember { mutableStateOf(Provider.BOBERT.defaultHost) }
     var user by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
     var saveLogin by remember { mutableStateOf(true) }
     var showProviderDialog by remember { mutableStateOf(false) }
+    var showPhoneSetupDialog by remember { mutableStateOf(false) }
     var restoredSavedProvider by remember { mutableStateOf(false) }
+    var phoneSetupStatus by remember { mutableStateOf<String?>(null) }
 
     val providerRequester = remember { FocusRequester() }
     val hostRequester = remember { FocusRequester() }
     val userRequester = remember { FocusRequester() }
     val passRequester = remember { FocusRequester() }
     val saveRequester = remember { FocusRequester() }
+    val phoneSetupRequester = remember { FocusRequester() }
     val signInRequester = remember { FocusRequester() }
 
     val appUpdate = state.appUpdate
     val visibleUpdate = appUpdate.availableUpdate?.takeIf { appUpdate.isDialogVisible }
-    val finalHost = if (selectedProvider.showHostField) customHost.trim() else selectedProvider.defaultHost
+    val finalHost = hostInput.trim()
     val canSubmit = finalHost.isNotBlank() && user.isNotBlank() && pass.isNotBlank() && !state.loading
 
     fun submitLogin() {
         if (!canSubmit) return
-        vm.login(finalHost, user.trim(), pass, saveLogin) { ok, _ -> if (ok) onLoggedIn() }
+        phoneSetupStatus = null
+        vm.login(
+            host = finalHost,
+            user = user.trim(),
+            pass = pass,
+            remember = saveLogin,
+            provider = selectedProvider.name
+        ) { ok, _ -> if (ok) onLoggedIn() }
     }
 
     LaunchedEffect(Unit) {
         vm.checkForAppUpdate()
     }
 
-    // Prefill from saved credentials once they load.
-    LaunchedEffect(state.savedHost, state.savedUser, state.savedPass) {
+    LaunchedEffect(state.savedHost, state.savedUser, state.savedPass, state.savedProvider) {
         if (!restoredSavedProvider && state.savedHost.isNotBlank()) {
-            val savedProvider = Provider.values().firstOrNull { !it.showHostField && it.defaultHost.equals(state.savedHost, ignoreCase = true) }
-            if (savedProvider != null) {
-                selectedProvider = savedProvider
-                customHost = ""
-            } else {
-                selectedProvider = Provider.CUSTOM
-                customHost = state.savedHost
+            val providerFromState = state.savedProvider
+                ?.let { savedName -> runCatching { Provider.valueOf(savedName) }.getOrNull() }
+            val providerFromHost = Provider.entries.firstOrNull {
+                !it.showHostField && it.defaultHost.equals(state.savedHost, ignoreCase = true)
             }
+            val restoredProvider = providerFromState ?: providerFromHost ?: Provider.CUSTOM
+            selectedProvider = restoredProvider
+            hostInput = state.savedHost
             restoredSavedProvider = true
         }
-        if (user.isEmpty() && state.savedUser.isNotEmpty()) user = state.savedUser
-        if (pass.isEmpty() && state.savedPass.isNotEmpty()) pass = state.savedPass
+        if (user.isEmpty() && state.savedUser.isNotBlank()) user = state.savedUser
+        if (pass.isEmpty() && state.savedPass.isNotBlank()) pass = state.savedPass
     }
 
-    LaunchedEffect(selectedProvider.showHostField, state.autoLoggingIn, visibleUpdate != null) {
+    LaunchedEffect(state.autoLoggingIn, visibleUpdate != null) {
         if (!state.autoLoggingIn && visibleUpdate == null) {
-            when {
-                selectedProvider.showHostField -> hostRequester.requestFocus()
-                else -> providerRequester.requestFocus()
-            }
+            providerRequester.requestFocus()
         }
     }
 
@@ -161,48 +202,48 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                         .fillMaxWidth()
                         .height(56.dp)
                         .focusRequester(providerRequester)
-                        .focusProperties {
-                            down = if (selectedProvider.showHostField) hostRequester else userRequester
-                        }
+                        .focusProperties { down = hostRequester }
                 ) {
-                    Text("Service: ${selectedProvider.displayName}", style = TvType.titleMedium)
+                    Text("Service preset: ${selectedProvider.displayName}", style = TvType.titleMedium)
                 }
                 Spacer(Modifier.height(16.dp))
 
-                if (selectedProvider.showHostField) {
-                    TvField(
-                        value = customHost,
-                        onChange = { customHost = it },
-                        label = "Server host (https://host:port)",
-                        focusRequester = hostRequester,
-                        upRequester = providerRequester,
-                        downRequester = userRequester,
-                        onSubmit = { userRequester.requestFocus() }
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
+                TvField(
+                    value = hostInput,
+                    onChange = { hostInput = it },
+                    label = "DNS / server URL (editable for every provider)",
+                    keyboardType = KeyboardType.Uri,
+                    focusRequester = hostRequester,
+                    upRequester = providerRequester,
+                    downRequester = userRequester,
+                    onSubmit = { userRequester.requestFocus() }
+                )
+                Spacer(Modifier.height(16.dp))
 
                 TvField(
                     value = user,
                     onChange = { user = it },
                     label = "Username",
+                    keyboardType = KeyboardType.Text,
                     focusRequester = userRequester,
-                    upRequester = if (selectedProvider.showHostField) hostRequester else providerRequester,
+                    upRequester = hostRequester,
                     downRequester = passRequester,
                     onSubmit = { passRequester.requestFocus() }
                 )
                 Spacer(Modifier.height(16.dp))
+
                 TvField(
                     value = pass,
                     onChange = { pass = it },
                     label = "Password",
                     isPassword = true,
+                    keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done,
                     focusRequester = passRequester,
                     upRequester = userRequester,
                     downRequester = saveRequester,
                     onSubmit = {
-                        if (canSubmit) submitLogin() else signInRequester.requestFocus()
+                        if (canSubmit) submitLogin() else saveRequester.requestFocus()
                     }
                 )
 
@@ -212,12 +253,36 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                     onToggle = { saveLogin = !saveLogin },
                     focusRequester = saveRequester,
                     upRequester = passRequester,
-                    downRequester = signInRequester
+                    downRequester = phoneSetupRequester
                 )
+
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        phoneSetupStatus = null
+                        showPhoneSetupDialog = true
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Surface1, contentColor = TextHi),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .focusRequester(phoneSetupRequester)
+                        .focusProperties {
+                            up = saveRequester
+                            down = signInRequester
+                        }
+                ) {
+                    Text("Phone / QR setup", style = TvType.titleMedium)
+                }
 
                 state.error?.let {
                     Spacer(Modifier.height(16.dp))
                     Text(it, color = Coral, style = TvType.bodyMedium)
+                }
+                phoneSetupStatus?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(it, color = Aqua, style = TvType.bodyMedium)
                 }
 
                 Spacer(Modifier.height(28.dp))
@@ -230,7 +295,7 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                         .fillMaxWidth()
                         .height(56.dp)
                         .focusRequester(signInRequester)
-                        .focusProperties { up = saveRequester }
+                        .focusProperties { up = phoneSetupRequester }
                 ) {
                     if (state.loading) {
                         CircularProgressIndicator(color = Midnight, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
@@ -247,8 +312,52 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                 onDismiss = { showProviderDialog = false },
                 onSelect = { provider ->
                     selectedProvider = provider
-                    if (!provider.showHostField) customHost = ""
+                    hostInput = when {
+                        provider.showHostField -> hostInput
+                        else -> provider.defaultHost
+                    }
                     showProviderDialog = false
+                    hostRequester.requestFocus()
+                }
+            )
+        }
+
+        if (showPhoneSetupDialog) {
+            PhoneSetupDialog(
+                selectedProvider = selectedProvider,
+                host = hostInput,
+                user = user,
+                pass = pass,
+                onDismiss = { showPhoneSetupDialog = false },
+                onApplySubmission = { submission ->
+                    val providerFromSubmission = submission.providerName
+                        ?.let { submittedName -> runCatching { Provider.valueOf(submittedName) }.getOrNull() }
+                    val providerFromHost = Provider.entries.firstOrNull {
+                        !it.showHostField && it.defaultHost.equals(submission.host, ignoreCase = true)
+                    }
+                    selectedProvider = providerFromSubmission ?: providerFromHost ?: Provider.CUSTOM
+                    hostInput = submission.host
+                    user = submission.user
+                    pass = submission.pass
+                    saveLogin = submission.saveLogin
+                    phoneSetupStatus = if (submission.autoSubmit) {
+                        "Phone submitted credentials. Signing in…"
+                    } else {
+                        "Phone submitted credentials. Review on TV, then press Sign in."
+                    }
+                    showPhoneSetupDialog = false
+                    if (submission.autoSubmit) {
+                        phoneSetupStatus = null
+                        vm.login(
+                            host = submission.host,
+                            user = submission.user.trim(),
+                            pass = submission.pass,
+                            remember = submission.saveLogin,
+                            provider = selectedProvider.name
+                        ) { ok, _ -> if (ok) onLoggedIn() }
+                    } else {
+                        signInRequester.requestFocus()
+                    }
                 }
             )
         }
@@ -264,6 +373,139 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                 onSkip = { vm.dismissUpdatePrompt() },
                 onUpdate = { vm.beginAppUpdate(context) }
             )
+        }
+    }
+}
+
+@Composable
+private fun PhoneSetupDialog(
+    selectedProvider: Provider,
+    host: String,
+    user: String,
+    pass: String,
+    onDismiss: () -> Unit,
+    onApplySubmission: (PhoneSetupSubmission) -> Unit
+) {
+    var session by remember { mutableStateOf<PhoneSetupSession?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var submissionReceived by remember { mutableStateOf(false) }
+
+    DisposableEffect(selectedProvider, host, user, pass) {
+        val server = PhoneSetupServer(
+            providers = Provider.entries,
+            selectedProvider = selectedProvider,
+            initialHost = host,
+            onSubmission = {
+                submissionReceived = true
+                onApplySubmission(it)
+            }
+        )
+        server.start()
+            .onSuccess {
+                session = it
+                errorMessage = null
+            }
+            .onFailure {
+                session = null
+                errorMessage = it.message ?: "Couldn't start the phone setup server."
+            }
+        onDispose {
+            server.stop()
+        }
+    }
+
+    val qrBitmap = remember(session?.url) {
+        session?.url?.let { generateQrCodeBitmap(it) }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = SurfaceHi,
+            modifier = Modifier.width(920.dp)
+        ) {
+            Column(
+                Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text("Phone / QR setup", style = TvType.headlineMedium, color = TextHi)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "While this window stays open, the TV hosts a local setup page on your home network. Scan the QR code or type the URL on your phone, then enter the DNS/server URL, username, and password. Existing saved credentials are not sent to the phone page.",
+                    style = TvType.bodyMedium,
+                    color = TextMid
+                )
+                Spacer(Modifier.height(20.dp))
+
+                if (errorMessage != null) {
+                    Text(errorMessage!!, color = Coral, style = TvType.bodyMedium)
+                } else if (session == null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(color = Aqua, modifier = Modifier.size(28.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Starting local phone setup page…", color = TextMid, style = TvType.bodyMedium)
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                        qrBitmap?.let {
+                            Surface(
+                                color = androidx.compose.ui.graphics.Color.White,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.padding(4.dp)
+                            ) {
+                                Image(
+                                    bitmap = it.asImageBitmap(),
+                                    contentDescription = "QR code for phone setup",
+                                    modifier = Modifier
+                                        .size(320.dp)
+                                        .padding(16.dp)
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("URL for your phone", style = TvType.titleMedium, color = TextHi)
+                            Spacer(Modifier.height(8.dp))
+                            Text(session!!.url, style = TvType.bodyLarge, color = Aqua)
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "TV LAN IP: ${session!!.hostAddress}:${session!!.port}",
+                                style = TvType.bodyMedium,
+                                color = TextMid
+                            )
+                            Spacer(Modifier.height(18.dp))
+                            Text("How it works", style = TvType.titleMedium, color = TextHi)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "1. Connect your phone to the same Wi‑Fi/LAN as the TV.\n" +
+                                    "2. Open the QR link.\n" +
+                                    "3. Enter provider preset, DNS/server URL, username, and password.\n" +
+                                    "4. Leave 'Sign in on TV after submit' checked to start login immediately, or uncheck it to only fill the TV form.",
+                                style = TvType.bodyMedium,
+                                color = TextMid
+                            )
+                            if (submissionReceived) {
+                                Spacer(Modifier.height(16.dp))
+                                Text("Credentials received from phone.", color = Aqua, style = TvType.bodyMedium)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = Surface1, contentColor = TextHi),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Close")
+                    }
+                }
+            }
         }
     }
 }
@@ -313,8 +555,8 @@ private fun ProviderDialog(
     onDismiss: () -> Unit,
     onSelect: (Provider) -> Unit
 ) {
-    val providerRequesters = remember { Provider.values().associateWith { FocusRequester() } }
-    val firstProvider = remember { Provider.values().first() }
+    val providerRequesters = remember { Provider.entries.associateWith { FocusRequester() } }
+    val firstProvider = remember { Provider.entries.first() }
 
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(DialogFocusDelayMs)
@@ -330,9 +572,9 @@ private fun ProviderDialog(
             Column(Modifier.padding(24.dp)) {
                 Text("Select Provider", style = TvType.headlineMedium, color = TextHi)
                 Spacer(Modifier.height(16.dp))
-                Provider.values().forEachIndexed { index, provider ->
-                    val upProvider = Provider.values().getOrNull(index - 1)
-                    val downProvider = Provider.values().getOrNull(index + 1)
+                Provider.entries.forEachIndexed { index, provider ->
+                    val upProvider = Provider.entries.getOrNull(index - 1)
+                    val downProvider = Provider.entries.getOrNull(index + 1)
                     Button(
                         onClick = { onSelect(provider) },
                         shape = RoundedCornerShape(8.dp),
@@ -384,7 +626,9 @@ private fun UpdateDialog(
             modifier = Modifier.width(560.dp)
         ) {
             Column(
-                Modifier.padding(24.dp).verticalScroll(rememberScrollState()),
+                Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.Start
             ) {
                 Text("Update available", style = TvType.headlineMedium, color = TextHi)
@@ -434,7 +678,9 @@ private fun UpdateDialog(
                             modifier = Modifier
                                 .focusRequester(skipRequester)
                                 .focusProperties { right = updateRequester }
-                        ) { Text("Skip") }
+                        ) {
+                            Text("Skip")
+                        }
                         Spacer(Modifier.width(12.dp))
                     }
                     Button(
@@ -500,6 +746,7 @@ private fun TvField(
     value: String,
     onChange: (String) -> Unit,
     label: String,
+    keyboardType: KeyboardType,
     isPassword: Boolean = false,
     imeAction: ImeAction = ImeAction.Next,
     focusRequester: FocusRequester,
@@ -516,7 +763,7 @@ private fun TvField(
         singleLine = true,
         visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
-            keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Uri,
+            keyboardType = keyboardType,
             imeAction = imeAction
         ),
         keyboardActions = KeyboardActions(
