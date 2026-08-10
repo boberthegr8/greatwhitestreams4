@@ -4,5 +4,5 @@
   "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
   "releaseNotes": "Hardening sweep: makes crash restart use a real safe startActivity fallback instead of retrying the same AlarmManager path, removes hardcoded release-signing secrets from source in favour of ignored local/env signing config, adds a provider-aware empty DNS feed so global portal override stays disabled and verifiable, and removes a stale tracked v4.24 APK. Yes, housekeeping. Boring is what stable looks like.",
   "mandatory": true,
-  "sha256": "3888eb5c1755a04ba0a711c7d3497a211b8fdce2943144f73ec2ed8ee647c94a"
+  "sha256": "ff9bb1d72bf8a7ba52b0de2ac47492b35cc874f185ece0504d5c6f81878a14ae"
 }
