@@ -12,6 +12,9 @@ interface UserStateDao {
     @Upsert
     suspend fun upsertFavoriteChannel(entity: FavoriteChannelEntity)
 
+    @Upsert
+    suspend fun upsertFavoriteChannels(entities: List<FavoriteChannelEntity>)
+
     @Query("DELETE FROM favorite_channels WHERE channelId = :channelId")
     suspend fun deleteFavoriteChannel(channelId: Int)
 
@@ -20,6 +23,12 @@ interface UserStateDao {
 
     @Upsert
     suspend fun upsertRecentChannel(entity: RecentChannelEntity)
+
+    @Upsert
+    suspend fun upsertRecentChannels(entities: List<RecentChannelEntity>)
+
+    @Query("DELETE FROM recent_channels WHERE channelId IN (:channelIds)")
+    suspend fun deleteRecentChannels(channelIds: List<Int>)
 
     @Query("DELETE FROM recent_channels")
     suspend fun clearRecentChannels()
@@ -32,6 +41,9 @@ interface UserStateDao {
 
     @Query("DELETE FROM playback_history WHERE contentType = :contentType AND contentId = :contentId")
     suspend fun deletePlaybackHistory(contentType: String, contentId: String)
+
+    @Query("DELETE FROM playback_history WHERE contentType = :contentType")
+    suspend fun clearPlaybackHistory(contentType: String)
 
     @Query("SELECT * FROM resume_positions WHERE contentType = :contentType AND contentId = :contentId LIMIT 1")
     suspend fun getResumePosition(contentType: String, contentId: String): ResumePositionEntity?

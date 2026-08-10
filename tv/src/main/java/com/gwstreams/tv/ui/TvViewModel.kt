@@ -9,6 +9,7 @@ import com.gwstreams.app.data.model.LiveStream
 import com.gwstreams.tv.BuildConfig
 import com.gwstreams.tv.data.DnsBootstrapper
 import com.gwstreams.tv.data.Updater
+import com.gwstreams.tv.data.UserStateRepository
 import com.gwstreams.app.data.repo.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,7 +81,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = XtreamRepository(app)
     private val settingsRepo = SettingsRepository(app)
     private val creds = com.gwstreams.tv.data.TvCredentialStore(app)
-    private val livePrefs = LivePrefsRepository(app)
+    private val userStateRepo = UserStateRepository(app)
 
     private val _state = MutableStateFlow(TvUiState())
     val state: StateFlow<TvUiState> = _state
@@ -96,7 +97,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.value = _state.value.copy(
                 settings = settingsRepo.load(),
-                lastPlayedChannelId = livePrefs.recentChannels().firstOrNull()
+                lastPlayedChannelId = userStateRepo.lastPlayedChannelId()
             )
 
             // Surface any saved credentials so the login screen can prefill,
@@ -570,7 +571,12 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         if (item.section == TvSection.LIVE) {
             _state.value = _state.value.copy(lastPlayedChannelId = item.id)
             viewModelScope.launch {
-                livePrefs.pushRecent(item.id)
+                userStateRepo.pushRecent(item.id)
+                userStateRepo.recordLivePlaybackStart(
+                    channelId = item.id,
+                    title = item.title,
+                    artworkUrl = item.image
+                )
             }
         }
     }
@@ -657,7 +663,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun mapLiveStreams(streams: List<LiveStream>): List<TvContentItem> {
-        val favorites = if (_state.value.settings.momMode) livePrefs.favorites() else emptySet()
+        val favorites = if (_state.value.settings.momMode) userStateRepo.favorites() else emptySet()
         val items = streams.map {
             TvContentItem(
                 id = it.streamId,
