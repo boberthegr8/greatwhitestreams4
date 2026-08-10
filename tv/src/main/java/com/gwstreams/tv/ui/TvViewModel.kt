@@ -1,6 +1,7 @@
 package com.gwstreams.tv.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gwstreams.app.data.model.SeriesInfoResponse
@@ -582,23 +583,31 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         if (item.section == TvSection.LIVE) {
             _state.value = _state.value.copy(lastPlayedChannelId = item.id)
             viewModelScope.launch {
-                userStateRepo.pushRecent(item.id)
-                userStateRepo.recordLivePlaybackStart(
-                    channelId = item.id,
-                    title = item.title,
-                    artworkUrl = item.image
-                )
-                refreshUserState()
-                publishCurrentLiveSelection(forceLoading = false)
+                try {
+                    userStateRepo.pushRecent(item.id)
+                    userStateRepo.recordLivePlaybackStart(
+                        channelId = item.id,
+                        title = item.title,
+                        artworkUrl = item.image
+                    )
+                    refreshUserState()
+                    publishCurrentLiveSelection(forceLoading = false)
+                } catch (error: Exception) {
+                    Log.w(TAG, "Ignoring live playback state persistence failure for channelId=${item.id}", error)
+                }
             }
         }
     }
 
     fun toggleFavorite(channelId: Int) {
         viewModelScope.launch {
-            userStateRepo.toggleFavorite(channelId)
-            refreshUserState()
-            publishCurrentLiveSelection(forceLoading = false)
+            try {
+                userStateRepo.toggleFavorite(channelId)
+                refreshUserState()
+                publishCurrentLiveSelection(forceLoading = false)
+            } catch (error: Exception) {
+                Log.w(TAG, "Ignoring favorite toggle persistence failure for channelId=$channelId", error)
+            }
         }
     }
 
@@ -795,6 +804,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }
 
     companion object {
+        private const val TAG = "TvViewModel"
         private const val CATEGORY_ID_FAVORITES = "__favorites__"
         private const val CATEGORY_ID_RECENT = "__recent__"
     }

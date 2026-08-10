@@ -105,7 +105,7 @@ fun TvPlayerScreen(
     onToggleFavorite: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val repo = remember(context.applicationContext) { XtreamRepository(context.applicationContext) }
+    val repo = remember { XtreamRepository() }
 
     var currentBuffer by remember { mutableIntStateOf(bufferSeconds) }
     var isReconnecting by remember { mutableStateOf(false) }
