@@ -1,8 +1,8 @@
 {
-  "versionCode": 19,
-  "versionName": "4.19",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.19-live-favorites-recents.apk",
-  "releaseNotes": "Adds Live TV Favorites and Recently Watched categories backed by the new Room user-state database, shows favorite stars in the guide, and adds a D-pad-safe Favorite/Unfavorite control in the player OSD. Preserves previous-channel row, updater compatibility, and existing data migration.",
+  "versionCode": 17,
+  "versionName": "4.17",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.17-stream-epg-osd.apk",
+  "releaseNotes": "Temporarily holding updates at v4.17 while a v4.18 playback navigation regression is fixed.",
   "mandatory": false,
-  "sha256": "5ed944aabab3d6e7904d237b163f1e11b61fb59e80d89d7435398b846bcbfb77"
+  "sha256": "e2d2f163bdc29cdaedbab11223e3d8cd823d7b6d369554ba124d0f5dfa20141b"
 }
