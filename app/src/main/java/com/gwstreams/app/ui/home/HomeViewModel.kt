@@ -51,7 +51,7 @@ data class HomeUiState(
 }
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = XtreamRepository()
+    private val repo = XtreamRepository(app)
     private val watch = WatchRepository(app)
     private val livePrefs = LivePrefsRepository(app)
     private val _state = MutableStateFlow(HomeUiState())

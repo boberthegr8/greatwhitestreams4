@@ -77,7 +77,7 @@ data class AppUpdateState(
 }
 
 class TvViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = XtreamRepository()
+    private val repo = XtreamRepository(app)
     private val settingsRepo = SettingsRepository(app)
     private val creds = com.gwstreams.tv.data.TvCredentialStore(app)
     private val livePrefs = LivePrefsRepository(app)

@@ -101,7 +101,7 @@ fun TvPlayerScreen(
     onZap: (TvContentItem?) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val repo = remember { XtreamRepository() }
+    val repo = remember(context.applicationContext) { XtreamRepository(context.applicationContext) }
 
     var currentBuffer by remember { mutableIntStateOf(bufferSeconds) }
     var isReconnecting by remember { mutableStateOf(false) }

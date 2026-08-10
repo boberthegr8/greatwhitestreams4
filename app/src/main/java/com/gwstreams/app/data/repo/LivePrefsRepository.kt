@@ -24,15 +24,18 @@ class LivePrefsRepository(private val context: Context) {
         val raw = context.liveStore.data.first()[key] ?: return emptyList()
         return runCatching {
             gson.fromJson<List<Int>>(raw, object : TypeToken<List<Int>>() {}.type)
-        }.getOrDefault(emptyList())
+        }.getOrDefault(emptyList()).normalizeIds()
     }
+
+    private fun List<Int>.normalizeIds(): List<Int> =
+        asSequence().filter { it > 0 }.distinct().toList()
 
     suspend fun favorites(): Set<Int> = readIds(kFav).toSet()
 
     suspend fun toggleFavorite(streamId: Int): Set<Int> {
         val cur = favorites().toMutableSet()
         if (!cur.add(streamId)) cur.remove(streamId)
-        context.liveStore.edit { it[kFav] = gson.toJson(cur.toList()) }
+        context.liveStore.edit { it[kFav] = gson.toJson(cur.toList().normalizeIds()) }
         return cur
     }
 
@@ -43,7 +46,7 @@ class LivePrefsRepository(private val context: Context) {
         val cur = recentChannels().toMutableList()
         cur.remove(streamId)
         cur.add(0, streamId)
-        val trimmed = cur.take(maxRecent)
+        val trimmed = cur.normalizeIds().take(maxRecent)
         context.liveStore.edit { it[kRecent] = gson.toJson(trimmed) }
         return trimmed
     }

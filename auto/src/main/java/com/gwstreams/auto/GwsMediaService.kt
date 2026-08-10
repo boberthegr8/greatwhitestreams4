@@ -34,7 +34,7 @@ class GwsMediaService : MediaLibraryService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var session: MediaLibrarySession
-    private val repo = XtreamRepository()
+    private val repo by lazy { XtreamRepository(this) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Cache of channels we've surfaced, so playback can resolve a stream URL by id.

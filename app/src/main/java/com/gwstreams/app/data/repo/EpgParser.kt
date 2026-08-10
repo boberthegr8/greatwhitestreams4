@@ -43,4 +43,9 @@ object EpgParser {
         val next = progs.firstOrNull { it.start >= (now?.stop ?: nowSec) }
         return NowNext(now, next)
     }
+
+    fun catchupProgrammes(listings: List<EpgListing>, nowSec: Long = System.currentTimeMillis() / 1000): List<Programme> {
+        val progs = toProgrammes(listings)
+        return progs.filter { it.stop <= nowSec }
+    }
 }

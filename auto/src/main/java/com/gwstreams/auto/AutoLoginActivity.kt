@@ -73,7 +73,7 @@ class AutoLoginActivity : AppCompatActivity() {
             status.setTextColor(0xFFA6B3C2.toInt())
             status.text = "Connecting…"
             lifecycleScope.launch {
-                val repo = XtreamRepository()
+                val repo = XtreamRepository(this@AutoLoginActivity)
                 val result = repo.login(host, user, pass)
                 result.fold(
                     onSuccess = {

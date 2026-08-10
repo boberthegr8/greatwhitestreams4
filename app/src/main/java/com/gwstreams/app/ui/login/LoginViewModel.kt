@@ -24,7 +24,7 @@ data class LoginUiState(
 )
 
 class LoginViewModel(app: Application) : AndroidViewModel(app) {
-    private val repo = XtreamRepository()
+    private val repo = XtreamRepository(app)
     private val _state = MutableStateFlow(LoginUiState())
     val state: StateFlow<LoginUiState> = _state
 

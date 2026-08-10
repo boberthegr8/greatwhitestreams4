@@ -18,7 +18,9 @@ data class AppSettings(
     val epgRefreshMinutes: Int = 10,
     val bufferSeconds: Int = 30,          // target buffer
     val hiddenCategories: Set<String> = emptySet(),   // category ids hidden from view
-    val categoryOrder: List<String> = emptyList()     // explicit ordering of category ids
+    val categoryOrder: List<String> = emptyList(),    // explicit ordering of category ids
+    val cableBoxMode: Boolean = false,    // auto-play last channel on boot
+    val momMode: Boolean = false          // lock UI to Live TV & favorites
 )
 
 class SettingsRepository(private val context: Context) {
@@ -29,6 +31,8 @@ class SettingsRepository(private val context: Context) {
     private val kBuffer = intPreferencesKey("buffer_sec")
     private val kHidden = stringPreferencesKey("hidden_cats")
     private val kOrder = stringPreferencesKey("cat_order")
+    private val kCableBox = booleanPreferencesKey("cable_box_mode")
+    private val kMomMode = booleanPreferencesKey("mom_mode")
 
     suspend fun load(): AppSettings {
         val p = context.settingsStore.data.first()
@@ -45,7 +49,9 @@ class SettingsRepository(private val context: Context) {
             epgRefreshMinutes = p[kEpgMin] ?: 10,
             bufferSeconds = p[kBuffer] ?: 30,
             hiddenCategories = hidden,
-            categoryOrder = order
+            categoryOrder = order,
+            cableBoxMode = p[kCableBox] ?: false,
+            momMode = p[kMomMode] ?: false
         )
     }
 
@@ -63,4 +69,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setCategoryOrder(ids: List<String>) =
         context.settingsStore.edit { it[kOrder] = gson.toJson(ids) }
+
+    suspend fun setCableBoxMode(v: Boolean) =
+        context.settingsStore.edit { it[kCableBox] = v }
+
+    suspend fun setMomMode(v: Boolean) =
+        context.settingsStore.edit { it[kMomMode] = v }
 }

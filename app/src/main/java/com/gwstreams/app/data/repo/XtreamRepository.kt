@@ -1,5 +1,6 @@
 package com.gwstreams.app.data.repo
 
+import android.content.Context
 import com.gwstreams.app.data.api.XtreamApi
 import com.gwstreams.app.data.model.*
 import kotlinx.coroutines.async
@@ -11,9 +12,11 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-class XtreamRepository {
+class XtreamRepository(private val context: Context? = null) {
 
     private var cachedApi: XtreamApi? = null
     private var cachedHost: String? = null
@@ -24,20 +27,39 @@ class XtreamRepository {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
-        val client = OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+        
+        // Ideas 10-17: Network Carpet Bombing
+        val cacheSize = 15L * 1024 * 1024 // 15MB
+        val dispatcher = okhttp3.Dispatcher().apply { maxRequestsPerHost = 15 }
+        val pool = okhttp3.ConnectionPool(10, 5, TimeUnit.MINUTES)
+        
+        val builder = OkHttpClient.Builder()
+            .cache(okhttp3.Cache(cacheDirectory(), cacheSize))
+            .dispatcher(dispatcher)
+            .connectionPool(pool)
+            .retryOnConnectionFailure(false) // Let ExoPlayer handle retries, don't block threads
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
             .addInterceptor(logging)
-            .build()
+            
+        val client = builder.build()
+        val gson = com.google.gson.GsonBuilder().setLenient().create() // Accept dirty JSON from IPTV providers
         val api = Retrofit.Builder()
             .baseUrl(base)
             .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
             .create(XtreamApi::class.java)
         cachedApi = api
         cachedHost = host
         return api
+    }
+
+    private fun cacheDirectory(): File {
+        val baseDir = context?.cacheDir
+            ?: System.getProperty("java.io.tmpdir")?.let(::File)
+            ?: File(".")
+        return File(baseDir, "okhttp_cache").apply { mkdirs() }
     }
 
     fun normalizeHost(raw: String): String {
@@ -136,6 +158,15 @@ class XtreamRepository {
                 sem.withPermit { id to EpgParser.nowNext(epgCached(id)) }
             }
         }.awaitAll().toMap()
+    }
+
+    fun inferLiveMimeType(url: String): String? {
+        val normalized = url.substringBefore('?').lowercase(Locale.US)
+        return when {
+            normalized.endsWith(".m3u8") -> androidx.media3.common.MimeTypes.APPLICATION_M3U8
+            normalized.endsWith(".ts") || normalized.contains("/live/") -> androidx.media3.common.MimeTypes.VIDEO_MP2T
+            else -> null
+        }
     }
 
     suspend fun vodInfo(vodId: Int): VodInfoResponse =

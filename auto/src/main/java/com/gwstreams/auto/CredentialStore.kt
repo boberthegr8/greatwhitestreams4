@@ -31,7 +31,7 @@ class CredentialStore(private val context: Context) {
         val host = p[kHost] ?: return false
         val user = p[kUser] ?: return false
         val pass = p[kPass] ?: return false
-        val repo = XtreamRepository()
+        val repo = XtreamRepository(context)
         val result = repo.login(host, user, pass)
         return result.isSuccess
     }
