@@ -1,8 +1,8 @@
 {
-  "versionCode": 16,
-  "versionName": "4.16",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.16-settings-dpad-back.apk",
-  "releaseNotes": "Adds Settings > Check for updates, fixes player D-pad controls for rewind/fast-forward while keeping previous-channel thumbnails, and fixes Back navigation from series/seasons/details so it stays inside the app instead of dumping to Google TV home.",
+  "versionCode": 17,
+  "versionName": "4.17",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.17-stream-epg-osd.apk",
+  "releaseNotes": "Fixes live streams dropping after a few minutes with stronger reconnect handling, adds a focused Reconnect/Restart control to the player OSD, removes the useless Aspect button, keeps previous-channel thumbnails, switches Live categories on focus, and starts caching channels plus EPG/now-next data for all Live categories in the background.",
   "mandatory": false,
-  "sha256": "1b9127facb0bc138156374fd7904f5e9501518bb706fec91e38290571eb3c33a"
+  "sha256": "e2d2f163bdc29cdaedbab11223e3d8cd823d7b6d369554ba124d0f5dfa20141b"
 }

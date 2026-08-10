@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gwstreams.app.data.model.SeriesInfoResponse
 import com.gwstreams.app.data.model.Category
+import com.gwstreams.app.data.model.LiveStream
 import com.gwstreams.tv.BuildConfig
 import com.gwstreams.tv.data.DnsBootstrapper
 import com.gwstreams.tv.data.Updater
@@ -15,6 +16,15 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 
 enum class TvSection { SEARCH, LIVE, MOVIES, SERIES, SETTINGS }
 
@@ -76,6 +86,10 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<TvUiState> = _state
 
     private val catCache = mutableMapOf<TvSection, List<Category>>()
+    private val liveItemsCache = mutableMapOf<String?, List<TvContentItem>>()
+    private val liveNowNextCache = mutableMapOf<Int, NowNext>()
+    private val livePrefetchMutex = Mutex()
+    private var livePrefetchJob: Job? = null
     private var hasCheckedForUpdate = false
 
     init {
@@ -116,6 +130,9 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                     if (finalHost != c.host) creds.save(repo.normalizeHost(finalHost), c.user, c.pass)
                     _state.value = _state.value.copy(autoLoggingIn = false, loggedIn = true)
                     selectSection(TvSection.LIVE)
+                    if (_state.value.settings.autoFetchEpg) {
+                        prefetchAllLiveContent()
+                    }
                 },
                 onFailure = {
                     // Saved creds failed (expired/changed) — fall back to the login screen.
@@ -255,6 +272,9 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                     if (remember) creds.save(repo.normalizeHost(finalHost), user, pass)
                     _state.value = _state.value.copy(loading = false, loggedIn = true)
                     selectSection(TvSection.LIVE)
+                    if (_state.value.settings.autoFetchEpg) {
+                        prefetchAllLiveContent()
+                    }
                     onResult(true, null)
                 },
                 onFailure = { e ->
@@ -266,6 +286,9 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectSection(section: TvSection) {
+        if (section != TvSection.LIVE) {
+            livePrefetchJob?.cancel()
+        }
         if (section == TvSection.SETTINGS) {
             _state.value = _state.value.copy(section = section)
             return
@@ -287,6 +310,9 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val visible = applyCategoryPrefs(cats)
                 _state.value = _state.value.copy(categories = visible)
+                if (section == TvSection.LIVE) {
+                    prefetchAllLiveContent(visible)
+                }
                 selectCategory(visible.firstOrNull()?.categoryId)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(loading = false, error = "Couldn't load. Check connection.")
@@ -304,22 +330,25 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectCategory(categoryId: String?) {
-        _state.value = _state.value.copy(selectedCategory = categoryId, loading = true, nowNext = emptyMap())
+        val section = _state.value.section
+        if (section == TvSection.LIVE) {
+            val cachedItems = liveItemsCache[categoryId]
+            _state.value = _state.value.copy(
+                selectedCategory = categoryId,
+                loading = cachedItems == null,
+                items = cachedItems ?: emptyList(),
+                nowNext = cachedItems?.associateNotNull { item ->
+                    liveNowNextCache[item.id]?.let { item.id to it }
+                } ?: emptyMap(),
+                error = null
+            )
+        } else {
+            _state.value = _state.value.copy(selectedCategory = categoryId, loading = true, nowNext = emptyMap())
+        }
         viewModelScope.launch {
             try {
-                val section = _state.value.section
-                    val items = when (section) {
-                    TvSection.LIVE -> {
-                        val streams = repo.liveStreams(categoryId).map {
-                            TvContentItem(it.streamId, it.name, it.streamIcon, num = it.num, hasCatchup = it.tvArchive == 1, section = TvSection.LIVE)
-                        }
-                        if (_state.value.settings.momMode) {
-                            val favs = livePrefs.favorites()
-                            streams.filter { it.id in favs }
-                        } else {
-                            streams
-                        }
-                    }
+                val items = when (section) {
+                    TvSection.LIVE -> getOrLoadLiveItems(categoryId)
                     TvSection.MOVIES -> repo.vodStreams(categoryId).map {
                         TvContentItem(it.streamId, it.name, it.streamIcon, it.rating,
                             containerExt = it.containerExtension, section = TvSection.MOVIES)
@@ -329,9 +358,15 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     else -> emptyList()
                 }
-                _state.value = _state.value.copy(items = items, loading = false)
-                if (section == TvSection.LIVE && _state.value.settings.autoFetchEpg) {
-                    fetchEpg(items.map { it.id })
+                if (_state.value.selectedCategory == categoryId && _state.value.section == section) {
+                    _state.value = _state.value.copy(items = items, loading = false)
+                }
+                if (section == TvSection.LIVE) {
+                    if (_state.value.settings.autoFetchEpg) {
+                        refreshCachedNowNext(categoryId, items)
+                    } else if (_state.value.selectedCategory == categoryId && _state.value.section == section) {
+                        _state.value = _state.value.copy(nowNext = emptyMap())
+                    }
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(loading = false, error = "Couldn't load content.")
@@ -348,7 +383,10 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshEpg() {
-        if (_state.value.section == TvSection.LIVE) fetchEpg(_state.value.items.map { it.id })
+        if (_state.value.section != TvSection.LIVE) return
+        viewModelScope.launch {
+            refreshCachedNowNext(_state.value.selectedCategory, _state.value.items, force = true)
+        }
     }
 
     fun onQuery(q: String) { 
@@ -521,6 +559,9 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         Session.host = ""; Session.username = ""; Session.password = ""; Session.userInfo = null
         repo.clearCache()
         catCache.clear()
+        liveItemsCache.clear()
+        liveNowNextCache.clear()
+        livePrefetchJob?.cancel()
         viewModelScope.launch { creds.clear() }
         _state.value = TvUiState(settings = _state.value.settings)
     }
@@ -534,21 +575,107 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun prefetchAllEpg() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val cats = repo.liveCategories()
-                for (cat in cats) {
-                    val streams = repo.liveStreams(cat.categoryId)
-                    if (streams.isNotEmpty()) {
-                        repo.batchNowNext(streams.map { it.streamId })
+    private suspend fun getOrLoadLiveItems(categoryId: String?): List<TvContentItem> {
+        liveItemsCache[categoryId]?.let { return it }
+        val streams = repo.liveStreams(categoryId)
+        val items = mapLiveStreams(streams)
+        liveItemsCache[categoryId] = items
+        return items
+    }
+
+    private suspend fun refreshCachedNowNext(
+        categoryId: String?,
+        items: List<TvContentItem>,
+        force: Boolean = false
+    ) {
+        if (items.isEmpty()) {
+            if (_state.value.selectedCategory == categoryId && _state.value.section == TvSection.LIVE) {
+                _state.value = _state.value.copy(nowNext = emptyMap(), loading = false)
+            }
+            return
+        }
+        val map = if (!force) {
+            items.associateNotNull { item -> liveNowNextCache[item.id]?.let { item.id to it } }
+        } else {
+            emptyMap()
+        }
+        if (map.size == items.size && _state.value.selectedCategory == categoryId && _state.value.section == TvSection.LIVE) {
+            _state.value = _state.value.copy(nowNext = map, loading = false)
+            return
+        }
+
+        val fetched = repo.batchNowNext(items.map { it.id })
+        livePrefetchMutex.withLock {
+            liveNowNextCache.putAll(fetched)
+        }
+        if (_state.value.selectedCategory == categoryId && _state.value.section == TvSection.LIVE) {
+            _state.value = _state.value.copy(
+                nowNext = items.associateNotNull { item -> liveNowNextCache[item.id]?.let { item.id to it } },
+                loading = false
+            )
+        }
+    }
+
+    private fun prefetchAllLiveContent(categoriesOverride: List<Category>? = null) {
+        if (!_state.value.loggedIn) return
+        livePrefetchJob?.cancel()
+        livePrefetchJob = viewModelScope.launch(Dispatchers.IO + SupervisorJob()) {
+            val categories = categoriesOverride ?: catCache[TvSection.LIVE] ?: runCatching { repo.liveCategories() }.getOrDefault(emptyList())
+            if (categories.isEmpty()) return@launch
+            val visible = applyCategoryPrefs(categories)
+            val semaphore = Semaphore(3)
+            coroutineScope {
+                visible.map { category ->
+                    async {
+                        semaphore.withPermit {
+                            if (!isActive) return@withPermit
+                            val streams = runCatching { repo.liveStreams(category.categoryId) }.getOrElse { return@withPermit }
+                            val items = mapLiveStreams(streams)
+                            livePrefetchMutex.withLock {
+                                liveItemsCache[category.categoryId] = items
+                            }
+                            if (_state.value.settings.autoFetchEpg && items.isNotEmpty()) {
+                                val nowNext = runCatching { repo.batchNowNext(items.map { it.id }) }.getOrElse { emptyMap() }
+                                livePrefetchMutex.withLock {
+                                    liveNowNextCache.putAll(nowNext)
+                                }
+                            }
+                            if (_state.value.section == TvSection.LIVE && _state.value.selectedCategory == category.categoryId) {
+                                withContext(Dispatchers.Main) {
+                                    _state.value = _state.value.copy(
+                                        items = items,
+                                        nowNext = items.associateNotNull { item -> liveNowNextCache[item.id]?.let { item.id to it } },
+                                        loading = false
+                                    )
+                                }
+                            }
+                        }
                     }
-                    kotlinx.coroutines.delay(1000) // Don't hammer the server too hard
-                }
-            } catch (e: Exception) {
-                // Ignore background prefetch errors
+                }.awaitAll()
             }
         }
     }
+
+    private suspend fun mapLiveStreams(streams: List<LiveStream>): List<TvContentItem> {
+        val favorites = if (_state.value.settings.momMode) livePrefs.favorites() else emptySet()
+        val items = streams.map {
+            TvContentItem(
+                id = it.streamId,
+                title = it.name,
+                image = it.streamIcon,
+                num = it.num,
+                hasCatchup = it.tvArchive == 1,
+                section = TvSection.LIVE
+            )
+        }
+        return if (_state.value.settings.momMode) items.filter { it.id in favorites } else items
+    }
+
+    private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair<K, V>?): Map<K, V> =
+        buildMap {
+            for (item in this@associateNotNull) {
+                transform(item)?.let { (key, value) -> put(key, value) }
+            }
+        }
 
 }

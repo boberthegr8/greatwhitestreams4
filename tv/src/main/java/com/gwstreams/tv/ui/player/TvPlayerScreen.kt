@@ -1,6 +1,7 @@
 package com.gwstreams.tv.ui.player
 
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -25,8 +26,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
@@ -43,7 +44,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,24 +68,24 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.DefaultAnalyticsCollector
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.gwstreams.app.data.repo.Session
+import com.gwstreams.app.data.repo.XtreamRepository
 import com.gwstreams.tv.ui.TvContentItem
 import com.gwstreams.tv.ui.TvSection
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -101,24 +101,19 @@ fun TvPlayerScreen(
     onZap: (TvContentItem?) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val repo = remember { XtreamRepository() }
 
     var currentBuffer by remember { mutableIntStateOf(bufferSeconds) }
-    var resizeModeIdx by remember { mutableIntStateOf(0) }
-    val resizeModes = listOf(
-        "Fit" to AspectRatioFrameLayout.RESIZE_MODE_FIT,
-        "Fill" to AspectRatioFrameLayout.RESIZE_MODE_FILL,
-        "Zoom" to AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-        "16:9" to AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
-    )
-
     var isReconnecting by remember { mutableStateOf(false) }
     var reconnectAttempts by remember { mutableIntStateOf(0) }
+    var reconnectTrigger by remember { mutableIntStateOf(0) }
+    var reconnectDelayMs by remember { mutableLongStateOf(0L) }
     var showBottomOsd by remember { mutableStateOf(false) }
     var osdHideTick by remember { mutableLongStateOf(0L) }
     var focusedOsdControl by remember { mutableStateOf<String?>(null) }
     var focusedChannelId by remember { mutableStateOf<Int?>(null) }
     val rootFocusRequester = remember { FocusRequester() }
+    val defaultOsdFocusRequester = remember { FocusRequester() }
 
     val initialUrl = remember(item) {
         when (item.section) {
@@ -142,10 +137,31 @@ fun TvPlayerScreen(
         bumpOsdTimer()
     }
 
+    fun requestReconnect(fromPlaybackFailure: Boolean, userInitiated: Boolean = false) {
+        if (activeUrl.isBlank()) return
+        reconnectDelayMs = when {
+            userInitiated -> 0L
+            fromPlaybackFailure -> {
+                reconnectAttempts += 1
+                (1_500L shl (reconnectAttempts - 1).coerceAtMost(3)).coerceAtMost(12_000L)
+            }
+            else -> 1_500L
+        }
+        isReconnecting = true
+        reconnectTrigger += 1
+        revealOsd()
+    }
+
     val exoPlayer = remember(currentBuffer, activeUrl) {
-        val bufMs = currentBuffer * 1000
+        val configuredBufferMs = (currentBuffer * 1000).coerceAtLeast(35_000)
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(500, bufMs.coerceAtLeast(30_000), 500, 500)
+            .setBufferDurationsMs(
+                3_000,
+                configuredBufferMs,
+                1_500,
+                3_000
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
         val renderersFactory = DefaultRenderersFactory(context)
             .setEnableDecoderFallback(true)
@@ -153,11 +169,19 @@ fun TvPlayerScreen(
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(buildUponParameters().setTunnelingEnabled(true))
         }
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setUserAgent("GWStreams")
+            .setConnectTimeoutMs(8_000)
+            .setReadTimeoutMs(20_000)
+        val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
         ExoPlayer.Builder(context)
             .setRenderersFactory(renderersFactory)
             .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAnalyticsCollector(DefaultAnalyticsCollector(Clock.DEFAULT))
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -176,55 +200,33 @@ fun TvPlayerScreen(
                     .build()
                 videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
                 setWakeMode(C.WAKE_MODE_NETWORK)
-
-                val dataSourceFactory = DefaultHttpDataSource.Factory()
-                    .setAllowCrossProtocolRedirects(true)
-                    .setUserAgent("GWStreams")
-                val mediaItem = MediaItem.Builder()
-                    .setUri(activeUrl)
-                    .apply { if (isLivePlayback) setMimeType(MimeTypes.VIDEO_MP2T) }
-                    .build()
-                val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory()
-                    .setConstantBitrateSeekingEnabled(true)
-                val source = ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
-                    .createMediaSource(mediaItem)
-                setMediaSource(source)
+                setMediaSource(buildMediaSource(mediaSourceFactory, repo, activeUrl, isLivePlayback))
                 prepare()
                 playWhenReady = true
 
                 addListener(object : Player.Listener {
-                    override fun onPlayerError(error: PlaybackException) {
-                        super.onPlayerError(error)
-                        if (error.cause !is UnrecognizedInputFormatException) {
-                            if (reconnectAttempts < 3) {
-                                reconnectAttempts++
-                                isReconnecting = true
-                                coroutineScope.launch {
-                                    delay(2000)
-                                    prepare()
-                                    playWhenReady = true
-                                    isReconnecting = false
-                                }
-                            } else {
-                                coroutineScope.launch(Dispatchers.IO) {
-                                    val isOnline = try {
-                                        Runtime.getRuntime().exec("ping -c 1 8.8.8.8").waitFor() == 0
-                                    } catch (_: Exception) {
-                                        false
-                                    }
-
-                                    withContext(Dispatchers.Main) {
-                                        val message = if (isOnline) {
-                                            "Provider Stream Offline (Server Error)"
-                                        } else {
-                                            "Check Internet Connection"
-                                        }
-                                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
-                                        onBack()
-                                    }
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        super.onPlaybackStateChanged(playbackState)
+                        when (playbackState) {
+                            Player.STATE_READY -> {
+                                reconnectAttempts = 0
+                                isReconnecting = false
+                            }
+                            Player.STATE_ENDED -> {
+                                if (isLivePlayback) {
+                                    requestReconnect(fromPlaybackFailure = true)
                                 }
                             }
                         }
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        super.onPlayerError(error)
+                        if (error.cause is UnrecognizedInputFormatException) {
+                            Toast.makeText(context, "Unsupported stream format for this channel.", Toast.LENGTH_LONG).show()
+                            return
+                        }
+                        requestReconnect(fromPlaybackFailure = true)
                     }
                 })
             }
@@ -250,9 +252,25 @@ fun TvPlayerScreen(
         revealOsd()
     }
 
+    LaunchedEffect(reconnectTrigger, exoPlayer) {
+        if (reconnectTrigger == 0) return@LaunchedEffect
+        if (reconnectDelayMs > 0) delay(reconnectDelayMs)
+        exoPlayer.stop()
+        exoPlayer.setMediaSource(buildPlayerMediaSource(context, repo, activeUrl, isLivePlayback), true)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+    }
+
+    LaunchedEffect(showBottomOsd, item.id, activeUrl, isLivePlayback) {
+        if (showBottomOsd) {
+            delay(75)
+            defaultOsdFocusRequester.requestFocus()
+        }
+    }
+
     LaunchedEffect(showBottomOsd, osdHideTick) {
         if (showBottomOsd) {
-            delay(5000)
+            delay(5_000)
             showBottomOsd = false
             focusedOsdControl = null
             focusedChannelId = null
@@ -363,13 +381,13 @@ fun TvPlayerScreen(
                 PlayerView(it).apply {
                     player = exoPlayer
                     useController = false
-                    resizeMode = resizeModes[resizeModeIdx].second
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     keepScreenOn = true
                 }
             },
             update = {
                 it.player = exoPlayer
-                it.resizeMode = resizeModes[resizeModeIdx].second
+                it.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -379,7 +397,7 @@ fun TvPlayerScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color(0xFF00BCD4))
                     Spacer(Modifier.height(16.dp))
-                    Text("Reconnecting...", color = Color.White)
+                    Text("Reconnecting stream…", color = Color.White)
                 }
             }
         }
@@ -429,21 +447,22 @@ fun TvPlayerScreen(
                         key = "guide",
                         icon = Icons.Filled.List,
                         label = if (isLivePlayback) "TV Guide" else "Back",
+                        focusRequester = if (!startsLive) defaultOsdFocusRequester else null,
                         onFocusChange = { focused ->
                             focusedOsdControl = if (focused) "guide" else focusedOsdControl.takeUnless { it == "guide" }
                         },
                         onClick = onBack
                     )
                     OsdIconButton(
-                        key = "aspect",
-                        icon = Icons.Filled.AspectRatio,
-                        label = "Aspect Ratio",
+                        key = "reconnect",
+                        icon = Icons.Filled.Refresh,
+                        label = if (isLivePlayback) "Reconnect" else "Restart",
+                        focusRequester = if (startsLive) defaultOsdFocusRequester else null,
                         onFocusChange = { focused ->
-                            focusedOsdControl = if (focused) "aspect" else focusedOsdControl.takeUnless { it == "aspect" }
+                            focusedOsdControl = if (focused) "reconnect" else focusedOsdControl.takeUnless { it == "reconnect" }
                         },
                         onClick = {
-                            resizeModeIdx = (resizeModeIdx + 1) % resizeModes.size
-                            bumpOsdTimer()
+                            requestReconnect(fromPlaybackFailure = false, userInitiated = true)
                         }
                     )
                     OsdIconButton(
@@ -460,35 +479,47 @@ fun TvPlayerScreen(
                                 15 -> 30
                                 else -> 2
                             }
-                            bumpOsdTimer()
+                            reconnectAttempts = 0
+                            requestReconnect(fromPlaybackFailure = false, userInitiated = true)
                         }
                     )
                     if (startsLive && item.hasCatchup) {
                         OsdIconButton(
                             key = "catchup",
                             icon = Icons.Filled.Replay,
-                            label = "Catch-up",
+                            label = if (isLivePlayback) "Catch-up" else "Go Live",
                             onFocusChange = { focused ->
                                 focusedOsdControl = if (focused) "catchup" else focusedOsdControl.takeUnless { it == "catchup" }
                             },
                             onClick = {
-                                val startUtc = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply {
-                                    timeZone = TimeZone.getTimeZone("UTC")
-                                }.format(Date(System.currentTimeMillis() - 3_600_000))
-                                activeUrl = Session.archiveUrl(item.id, startUtc, 60)
-                                isLivePlayback = false
-                                revealOsd()
+                                if (isLivePlayback) {
+                                    val startUtc = SimpleDateFormat("yyyy-MM-dd:HH-mm", Locale.US).apply {
+                                        timeZone = TimeZone.getTimeZone("UTC")
+                                    }.format(Date(System.currentTimeMillis() - 3_600_000))
+                                    activeUrl = Session.archiveUrl(item.id, startUtc, 60)
+                                    isLivePlayback = false
+                                    revealOsd()
+                                } else {
+                                    activeUrl = initialUrl
+                                    isLivePlayback = startsLive
+                                    requestReconnect(fromPlaybackFailure = false, userInitiated = true)
+                                }
                             }
                         )
                     }
                     OsdIconButton(
-                        key = "audio",
+                        key = "controls",
                         icon = Icons.Filled.Settings,
-                        label = if (isLivePlayback) "Audio/CC" else "Seek ±10s",
+                        label = if (isLivePlayback) "Seek ±10s" else "Playback",
                         onFocusChange = { focused ->
-                            focusedOsdControl = if (focused) "audio" else focusedOsdControl.takeUnless { it == "audio" }
+                            focusedOsdControl = if (focused) "controls" else focusedOsdControl.takeUnless { it == "controls" }
                         },
-                        onClick = { bumpOsdTimer() }
+                        onClick = {
+                            revealOsd()
+                            if (!isLivePlayback) {
+                                Toast.makeText(context, "Use left/right to seek 10 seconds.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     )
                 }
 
@@ -550,11 +581,44 @@ fun TvPlayerScreen(
     }
 }
 
+@UnstableApi
+private fun buildPlayerMediaSource(
+    context: android.content.Context,
+    repo: XtreamRepository,
+    url: String,
+    isLivePlayback: Boolean
+): MediaSource {
+    val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        .setAllowCrossProtocolRedirects(true)
+        .setUserAgent("GWStreams")
+        .setConnectTimeoutMs(8_000)
+        .setReadTimeoutMs(20_000)
+    val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+    val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+    return buildMediaSource(mediaSourceFactory, repo, url, isLivePlayback)
+}
+
+@UnstableApi
+private fun buildMediaSource(
+    mediaSourceFactory: DefaultMediaSourceFactory,
+    repo: XtreamRepository,
+    url: String,
+    isLivePlayback: Boolean
+): MediaSource {
+    val builder = MediaItem.Builder().setUri(url)
+    when {
+        url.endsWith(".m3u8", ignoreCase = true) -> builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        isLivePlayback -> builder.setMimeType(repo.inferLiveMimeType(url) ?: MimeTypes.VIDEO_MP2T)
+    }
+    return mediaSourceFactory.createMediaSource(builder.build())
+}
+
 @Composable
 private fun OsdIconButton(
     key: String,
     icon: ImageVector,
     label: String,
+    focusRequester: FocusRequester? = null,
     onFocusChange: (Boolean) -> Unit,
     onClick: () -> Unit
 ) {
@@ -562,6 +626,7 @@ private fun OsdIconButton(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged {
                 isFocused = it.isFocused
                 onFocusChange(it.isFocused)
@@ -577,7 +642,7 @@ private fun OsdIconButton(
     ) {
         Icon(
             icon,
-            contentDescription = label,
+            contentDescription = key,
             tint = if (isFocused) Color.White else Color.LightGray,
             modifier = Modifier.size(32.dp)
         )

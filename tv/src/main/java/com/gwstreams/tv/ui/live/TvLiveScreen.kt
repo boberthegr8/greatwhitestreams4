@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package com.gwstreams.tv.ui.live
 
@@ -8,19 +8,43 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.launch
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
+
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalContext
+import com.gwstreams.app.data.repo.Session
+import androidx.media3.common.MimeTypes
+
 import coil.compose.AsyncImage
 import com.gwstreams.app.data.repo.NowNext
 import com.gwstreams.app.data.repo.Programme
@@ -42,103 +66,177 @@ fun TvLiveScreen(
     onPlay: (TvContentItem) -> Unit
 ) {
     val state by vm.state.collectAsState()
+    var bgStreamUrl by remember { mutableStateOf("") }
+    var bgIsLive by remember { mutableStateOf(true) }
 
-    Row(Modifier.fillMaxSize().background(Midnight)) {
-        LeftPanel(
-            state = state,
+    Row(Modifier.fillMaxSize().background(Color(0xFF0F1115))) {
+        // StartupShow Collapsible Left Sidebar
+        SectionNavPane(
+            currentSection = state.section,
             onSection = vm::selectSection,
-            onCategory = vm::selectCategory,
-            onQuery = vm::onQuery
+            momMode = state.settings.momMode
         )
-        Box(Modifier.weight(1f).fillMaxHeight().padding(8.dp)) {
-            when {
-                state.loading -> CircularProgressIndicator(
-                    color = Aqua, modifier = Modifier.align(Alignment.Center)
-                )
-                state.error != null -> Text(
-                    state.error!!, color = TextMid,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-                else -> GuideGrid(vm.visibleItems(), state, nowSec, onPlay)
+        
+        Box(modifier = Modifier.fillMaxSize()) {
+            
+            // Content Layer (Categories + Guide)
+            Row(Modifier.fillMaxSize().padding(top = 16.dp, end = 16.dp)) {
+                if (state.section != TvSection.SEARCH && state.section != TvSection.SETTINGS) {
+                    CategoryPane(
+                        categories = state.categories,
+                        selectedId = state.selectedCategory,
+                        onCategory = vm::selectCategory
+                    )
+                }
+
+                Box(Modifier.weight(1f)) {
+                    if (state.items.isEmpty() && !state.loading) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Filled.Tv, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.DarkGray)
+                                Spacer(Modifier.height(16.dp))
+                                Text("No Content Available", color = Color.Gray, style = TvType.titleMedium)
+                            }
+                        }
+                    } else {
+                        // Guide / VOD Grid
+                        Column(Modifier.fillMaxSize()) {
+                            // Top PiP area (Only for Live TV)
+                            if (state.section == TvSection.LIVE) {
+                                Row(Modifier.fillMaxWidth().height(110.dp).padding(bottom = 16.dp)) {
+                                    Box(Modifier.weight(1f)) {
+                                        // We can put current program details here if we want, or just leave blank
+                                    }
+                                    if (bgStreamUrl.isNotBlank()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(180.dp)
+                                                .aspectRatio(16f / 9f)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .border(2.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                                                .background(Color.Black)
+                                        ) {
+                                            BackgroundVideoPlayer(url = bgStreamUrl, isLive = true)
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Box(Modifier.weight(1f)) {
+                                GuideGrid(
+                                    items = state.items,
+                                    state = state,
+                                    nowSec = nowSec,
+                                    onPlay = onPlay,
+                                    onQuery = vm::onQuery,
+                                    onFocus = {
+                                        bgIsLive = it.section == TvSection.LIVE
+                                        if (it.section == TvSection.LIVE) {
+                                            bgStreamUrl = Session.liveUrl(it.id)
+                                        }
+                                        // We remove background video for VOD to focus purely on PiP for Live.
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun LeftPanel(
-    state: TvUiState,
+private fun SectionNavPane(
+    currentSection: TvSection,
     onSection: (TvSection) -> Unit,
-    onCategory: (String) -> Unit,
-    onQuery: (String) -> Unit
+    momMode: Boolean
 ) {
+    var hasFocus by remember { mutableStateOf(false) }
+    val width by androidx.compose.animation.core.animateDpAsState(if (hasFocus) 220.dp else 72.dp, androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 300f))
+
     Column(
         Modifier
-            .width(300.dp)
+            .width(width)
             .fillMaxHeight()
-            .background(Surface1)
-            .padding(16.dp)
+            .background(Color(0xFF18181C))
+            .onFocusChanged { hasFocus = it.hasFocus }
+            .padding(vertical = 16.dp)
     ) {
-        Text("Great White", style = TvType.titleLarge, color = TextHi)
-        Text("Streams", style = TvType.titleLarge, color = Aqua)
-        Spacer(Modifier.height(20.dp))
-
-        // Section tabs
         TvSection.values().forEach { section ->
-            NavRow(
-                label = section.label(),
-                selected = state.section == section,
+            if (momMode && (section == TvSection.MOVIES || section == TvSection.SERIES)) return@forEach
+            SectionRow(
+                section = section,
+                selected = currentSection == section,
+                expanded = hasFocus,
                 onClick = { onSection(section) }
             )
         }
+    }
+}
 
-        Spacer(Modifier.height(16.dp))
-        Divider(color = Surface2)
-        Spacer(Modifier.height(16.dp))
-
-        // Search lives in the left panel so it doesn't eat vertical space on the right.
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = onQuery,
-            leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextLow) },
-            placeholder = { Text("Search", color = TextLow) },
-            singleLine = true,
-            shape = RoundedCornerShape(10.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Aqua,
-                unfocusedBorderColor = SurfaceHi,
-                focusedContainerColor = Surface2,
-                unfocusedContainerColor = Surface2,
-                cursorColor = Aqua,
-                focusedTextColor = TextHi,
-                unfocusedTextColor = TextHi
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(16.dp))
-        Text("CATEGORIES", style = TvType.labelSmall, color = TextLow)
-        Spacer(Modifier.height(8.dp))
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(state.categories, key = { it.categoryId }) { cat ->
-                NavRow(
-                    label = cat.categoryName,
-                    selected = cat.categoryId == state.selectedCategory,
-                    onClick = { onCategory(cat.categoryId) }
-                )
+@Composable
+private fun SectionRow(section: TvSection, selected: Boolean, expanded: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val bg = when {
+        focused -> SurfaceHi
+        selected -> Surface2
+        else -> Color.Transparent
+    }
+    Surface(
+        onClick = onClick,
+        interactionSource = interaction,
+        color = bg,
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .then(if (focused) Modifier.border(2.dp, Aqua, RoundedCornerShape(10.dp)) else Modifier)
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(section.icon(), contentDescription = section.label(), tint = if (selected || focused) Aqua else TextMid)
+            if (expanded) {
+                Spacer(Modifier.width(16.dp))
+                Text(section.label(), color = if (selected || focused) Aqua else TextMid, style = TvType.bodyMedium, maxLines = 1)
             }
         }
     }
 }
 
 @Composable
-private fun NavRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun CategoryPane(
+    categories: List<com.gwstreams.app.data.model.Category>,
+    selectedId: String?,
+    onCategory: (String) -> Unit
+) {
+    LazyColumn(
+        Modifier.width(240.dp).fillMaxHeight().background(Color.Transparent).padding(top = 16.dp, bottom = 16.dp, start = 8.dp, end = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items(categories, key = { it.categoryId }) { cat ->
+            NavRow(
+                label = cat.categoryName,
+                selected = cat.categoryId == selectedId,
+                onClick = { onCategory(cat.categoryId) },
+                onFocus = {
+                    if (cat.categoryId != selectedId) onCategory(cat.categoryId)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun NavRow(label: String, selected: Boolean, onClick: () -> Unit, onFocus: () -> Unit = {}) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    LaunchedEffect(focused) {
+        if (focused) {
+            kotlinx.coroutines.delay(200) // Debounce
+            onFocus()
+        }
+    }
     val bg = when {
         focused -> SurfaceHi
         selected -> Surface2
@@ -163,26 +261,116 @@ private fun NavRow(label: String, selected: Boolean, onClick: () -> Unit) {
         )
     }
 }
-
 @Composable
 private fun GuideGrid(
     items: List<TvContentItem>,
     state: TvUiState,
     nowSec: Long,
-    onPlay: (TvContentItem) -> Unit
+    onPlay: (TvContentItem) -> Unit,
+    onQuery: (String) -> Unit,
+    onFocus: (TvContentItem) -> Unit = {}
 ) {
-    if (state.section != TvSection.LIVE) {
-        // Movies/Series render as a focusable card grid instead of a guide.
-        com.gwstreams.tv.ui.vod.TvVodGrid(items, onPlay)
+    if (state.section == TvSection.SEARCH) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
+            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = onQuery,
+                leadingIcon = { Icon(Icons.Filled.Search, null, tint = TextLow) },
+                placeholder = { Text("Search channels, movies, series...", color = TextLow) },
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Aqua,
+                    unfocusedBorderColor = SurfaceHi,
+                    focusedContainerColor = Surface2,
+                    unfocusedContainerColor = Surface2,
+                    cursorColor = Aqua,
+                    focusedTextColor = TextHi,
+                    unfocusedTextColor = TextHi
+                ),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+            )
+            
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (state.loading) {
+                    CircularProgressIndicator(color = Aqua, modifier = Modifier.align(Alignment.Center))
+                } else if (items.isEmpty() && state.query.trim().length >= 3) {
+                    Text("No results found for \"${state.query}\"", color = TextMid, modifier = Modifier.align(Alignment.Center))
+                } else if (items.isEmpty()) {
+                    Text("Type at least 3 characters to search", color = TextMid, modifier = Modifier.align(Alignment.Center))
+                } else {
+                    com.gwstreams.tv.ui.vod.TvVodGrid(items, onPlay, onFocus)
+                }
+            }
+        }
         return
     }
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxSize()
+
+    if (state.section != TvSection.LIVE) {
+        // Movies/Series render as a focusable card grid instead of a guide.
+        com.gwstreams.tv.ui.vod.TvVodGrid(items, onPlay, onFocus)
+        return
+    }
+    Column(Modifier.fillMaxSize()) {
+        // TiviMate-style Timeline Header
+        Row(
+            Modifier.fillMaxWidth().height(36.dp).padding(end = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(Modifier.width(220.dp))
+            Row(
+                Modifier.weight(1f).padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Approximate alignment with the 1.4f and 1.0f weights used below
+                Box(Modifier.weight(1.4f)) {
+                    Text(timeLabel(nowSec - (nowSec % 1800)), style = TvType.labelMedium, color = TextMid)
+                }
+                Box(Modifier.weight(1f).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, Color(0x33000000))))) { // Idea 24: Gradient EPG
+                    Text(timeLabel(nowSec - (nowSec % 1800) + 3600), style = TvType.labelMedium, color = TextMid)
+                }
+            }
+        }
+        val listState = androidx.compose.runtime.saveable.rememberSaveable(saver = androidx.compose.foundation.lazy.LazyListState.Saver) { androidx.compose.foundation.lazy.LazyListState() }
+        val coroutineScope = rememberCoroutineScope()
+        var lastScrollTime by remember { mutableLongStateOf(0L) }
+        LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(vertical = 120.dp), // Focus Re-centering: Keeps active item near center
+            modifier = Modifier.weight(1f).onPreviewKeyEvent { event ->
+                val now = System.currentTimeMillis()
+                if (now - lastScrollTime < 50) return@onPreviewKeyEvent true
+                lastScrollTime = now
+                val it = event // map event for inner code
+            if (it.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                when (it.nativeKeyEvent.keyCode) {
+                    android.view.KeyEvent.KEYCODE_CHANNEL_UP, android.view.KeyEvent.KEYCODE_MEDIA_REWIND, android.view.KeyEvent.KEYCODE_PAGE_UP -> {
+                        coroutineScope.launch {
+                            val next = maxOf(0, listState.firstVisibleItemIndex - 7)
+                            listState.animateScrollToItem(next)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    android.view.KeyEvent.KEYCODE_CHANNEL_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, android.view.KeyEvent.KEYCODE_PAGE_DOWN -> {
+                        coroutineScope.launch {
+                            val next = minOf(items.size - 1, listState.firstVisibleItemIndex + 7)
+                            listState.animateScrollToItem(next)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                }
+            }
+            false
+        }
     ) {
         items(items, key = { "g-${it.id}" }) { item ->
-            GuideRow(item, state.nowNext[item.id], nowSec, onPlay)
+            GuideRow(item, state.nowNext[item.id], nowSec, state.lastPlayedChannelId == item.id, onPlay, onFocus)
         }
+    }
     }
 }
 
@@ -191,10 +379,19 @@ private fun GuideRow(
     item: TvContentItem,
     nowNext: NowNext?,
     nowSec: Long,
-    onPlay: (TvContentItem) -> Unit
+    isPlaying: Boolean,
+    onPlay: (TvContentItem) -> Unit,
+    onFocus: (TvContentItem) -> Unit = {}
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+
+    LaunchedEffect(focused) {
+        if (focused) {
+            kotlinx.coroutines.delay(800) // Wait a bit before auto-playing background
+            onFocus(item)
+        }
+    }
 
     Surface(
         onClick = { onPlay(item) },
@@ -203,7 +400,7 @@ private fun GuideRow(
         shape = RoundedCornerShape(10.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp)
+            .height(68.dp)
             .then(if (focused) Modifier.border(2.dp, Aqua, RoundedCornerShape(10.dp)) else Modifier)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -212,10 +409,17 @@ private fun GuideRow(
                 Modifier.width(220.dp).fillMaxHeight().padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (item.num != null) {
+                if (isPlaying) {
+                    val infiniteTransition = rememberInfiniteTransition()
+                    val alpha by infiniteTransition.animateFloat(
+                        initialValue = 0.3f, targetValue = 1f,
+                        animationSpec = infiniteRepeatable(animation = tween(1000), repeatMode = RepeatMode.Reverse)
+                    )
+                    Text("▶", color = Coral, style = TvType.labelSmall, modifier = Modifier.width(36.dp).alpha(alpha))
+                } else if (item.num != null) {
                     Text(
                         "${item.num}",
-                        style = TvType.labelSmall,
+                        style = TvType.labelSmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), // Monospace alignment
                         color = TextLow,
                         modifier = Modifier.width(36.dp)
                     )
@@ -228,10 +432,10 @@ private fun GuideRow(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     item.title,
-                    style = TvType.titleMedium,
+                    style = TvType.bodyMedium,
                     color = TextHi,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 1,
+                    modifier = if (focused) Modifier.basicMarquee() else Modifier
                 )
             }
             // Programme blocks
@@ -263,13 +467,14 @@ private fun RowScope.ProgrammeBlock(p: Programme, isNow: Boolean, nowSec: Long, 
         Modifier
             .weight(weight)
             .fillMaxHeight()
+            .alpha(if (isNow) 1f else 0.65f) // Idea 16: Dim future/past shows
             .clip(RoundedCornerShape(8.dp))
             .background(if (isNow) Surface2 else Surface1)
             .padding(8.dp)
     ) {
         Text(
-            "${timeLabel(p.start)}  ${p.title}",
-            style = TvType.titleMedium,
+            p.title,
+            style = TvType.bodyMedium,
             color = if (isNow) TextHi else TextMid,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -277,7 +482,7 @@ private fun RowScope.ProgrammeBlock(p: Programme, isNow: Boolean, nowSec: Long, 
         if (p.description.isNotBlank()) {
             Text(
                 p.description,
-                style = TvType.bodyMedium,
+                style = TvType.labelSmall,
                 color = TextLow,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -303,8 +508,60 @@ private fun timeLabel(sec: Long): String =
         .format(java.util.Date(sec * 1000))
 
 fun TvSection.label(): String = when (this) {
+    TvSection.SEARCH -> "Search"
     TvSection.LIVE -> "Live TV"
     TvSection.MOVIES -> "Movies"
     TvSection.SERIES -> "Series"
     TvSection.SETTINGS -> "Settings"
+}
+
+
+fun TvSection.icon() = when (this) {
+    TvSection.SEARCH -> Icons.Filled.Search
+    TvSection.LIVE -> Icons.Filled.Tv
+    TvSection.MOVIES -> Icons.Filled.Movie
+    TvSection.SERIES -> Icons.Filled.VideoLibrary
+    TvSection.SETTINGS -> Icons.Filled.Settings
+}
+
+
+
+
+@Composable
+fun BackgroundVideoPlayer(url: String, isLive: Boolean) {
+    if (url.isBlank()) {
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F1115)))
+        return
+    }
+    
+    val context = LocalContext.current
+    val player = remember(url) {
+        val exoPlayer = ExoPlayer.Builder(context)
+            .setRenderersFactory(androidx.media3.exoplayer.DefaultRenderersFactory(context).setEnableDecoderFallback(true))
+            .build()
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .apply { if (isLive) setMimeType(MimeTypes.VIDEO_MP2T) }
+            .build()
+        exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.volume = 0f // Mute background video by default so it doesn't annoy
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+        exoPlayer
+    }
+    
+    DisposableEffect(url) {
+        onDispose { player.release() }
+    }
+    
+    AndroidView(
+        factory = {
+            PlayerView(it).apply {
+                this.player = player
+                useController = false
+                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
 }
