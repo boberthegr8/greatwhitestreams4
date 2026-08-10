@@ -1,8 +1,8 @@
 {
-  "versionCode": 21,
-  "versionName": "4.21",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.21-crash-diagnostics.apk",
-  "releaseNotes": "Adds local redacted crash diagnostics so future app crashes no longer silently look like a logout. Last crash notices appear on login and in Settings, with credentials and obvious tokens redacted. Includes the v4.20 playback hotfix plus Favorites and Recently Watched.",
+  "versionCode": 22,
+  "versionName": "4.22",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.22-remove-hardcoded-login.apk",
+  "releaseNotes": "Removes the hardcoded Bobert login autofill. Bobert remains selectable with its default host, but username/password now stay blank unless loaded from saved credentials. Also removes old APK artifacts from the repo head. Includes v4.21 crash diagnostics and v4.20 playback hotfix.",
   "mandatory": false,
-  "sha256": "711261bd607de9c2e5753583fe73a716f76d4ed25317da20ce817f2ce43a9294"
+  "sha256": "f62539c9c2dc6c2330ac54801e29a80b2fa996fb498cb000e66a02851a6cc7ba"
 }

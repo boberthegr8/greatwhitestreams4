@@ -12,8 +12,8 @@ android {
         applicationId = "com.local.media.viewer.v4"
         minSdk = 24
         targetSdk = 34
-        versionCode = 21
-        versionName = "4.21"
+        versionCode = 22
+        versionName = "4.22"
         vectorDrawables { useSupportLibrary = true }
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a") // Idea 33: Cut APK size by 40% (No x86 bloat)
