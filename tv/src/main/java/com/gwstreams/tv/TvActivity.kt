@@ -217,13 +217,15 @@ class TvActivity : ComponentActivity() {
                                         item = activeScreen.item,
                                         items = state.items,
                                         bufferSeconds = state.settings.bufferSeconds,
+                                        isFavorite = activeScreen.item.id in state.favorites,
                                         onBack = { screen = playerReturnScreen },
                                         onZap = { nextItem ->
                                             if (nextItem != null) {
                                                 vm.onPlayItem(nextItem)
                                                 screen = TvScreen.Player(nextItem)
                                             }
-                                        }
+                                        },
+                                        onToggleFavorite = vm::toggleFavorite
                                     )
                                 }
                             }

@@ -59,7 +59,9 @@ data class TvUiState(
     val savedPass: String = "",
     val seriesInfo: SeriesInfoResponse? = null,
     val appUpdate: AppUpdateState = AppUpdateState(),
-    val lastPlayedChannelId: Int? = null
+    val lastPlayedChannelId: Int? = null,
+    val favorites: Set<Int> = emptySet(),
+    val recentChannelIds: List<Int> = emptyList()
 )
 
 @androidx.compose.runtime.Immutable
@@ -99,6 +101,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                 settings = settingsRepo.load(),
                 lastPlayedChannelId = userStateRepo.lastPlayedChannelId()
             )
+            refreshUserState()
 
             // Surface any saved credentials so the login screen can prefill,
             // and attempt a silent auto-login so the app stays signed in.
@@ -310,11 +313,18 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 val visible = applyCategoryPrefs(cats)
-                _state.value = _state.value.copy(categories = visible)
+                val liveCategories = if (section == TvSection.LIVE) withUserStateCategories(visible) else visible
+                _state.value = _state.value.copy(categories = liveCategories)
                 if (section == TvSection.LIVE) {
                     prefetchAllLiveContent(visible)
                 }
-                selectCategory(visible.firstOrNull()?.categoryId)
+                selectCategory(
+                    when {
+                        section != TvSection.LIVE -> liveCategories.firstOrNull()?.categoryId
+                        visible.isNotEmpty() -> visible.first().categoryId
+                        else -> liveCategories.firstOrNull()?.categoryId
+                    }
+                )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(loading = false, error = "Couldn't load. Check connection.")
             }
@@ -333,7 +343,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun selectCategory(categoryId: String?) {
         val section = _state.value.section
         if (section == TvSection.LIVE) {
-            val cachedItems = liveItemsCache[categoryId]
+            val cachedItems = cachedDisplayItemsFor(categoryId)
             _state.value = _state.value.copy(
                 selectedCategory = categoryId,
                 loading = cachedItems == null,
@@ -349,7 +359,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val items = when (section) {
-                    TvSection.LIVE -> getOrLoadLiveItems(categoryId)
+                    TvSection.LIVE -> getOrLoadDisplayedLiveItems(categoryId)
                     TvSection.MOVIES -> repo.vodStreams(categoryId).map {
                         TvContentItem(it.streamId, it.name, it.streamIcon, it.rating,
                             containerExt = it.containerExtension, section = TvSection.MOVIES)
@@ -553,6 +563,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val updated = block(_state.value.settings)
             _state.value = _state.value.copy(settings = updated)
+            publishCurrentLiveSelection(forceLoading = false)
         }
     }
 
@@ -577,8 +588,27 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                     title = item.title,
                     artworkUrl = item.image
                 )
+                refreshUserState()
+                publishCurrentLiveSelection(forceLoading = false)
             }
         }
+    }
+
+    fun toggleFavorite(channelId: Int) {
+        viewModelScope.launch {
+            userStateRepo.toggleFavorite(channelId)
+            refreshUserState()
+            publishCurrentLiveSelection(forceLoading = false)
+        }
+    }
+
+    private suspend fun getOrLoadDisplayedLiveItems(categoryId: String?): List<TvContentItem> {
+        if (isUserStateCategory(categoryId)) {
+            ensureUserStateCategorySeeded()
+            return displayedItemsForCategory(categoryId)
+        }
+        val baseItems = getOrLoadLiveItems(categoryId)
+        return applyLiveFilters(baseItems)
     }
 
     private suspend fun getOrLoadLiveItems(categoryId: String?): List<TvContentItem> {
@@ -648,11 +678,16 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             if (_state.value.section == TvSection.LIVE && _state.value.selectedCategory == category.categoryId) {
                                 withContext(Dispatchers.Main) {
+                                    val visibleItems = applyLiveFilters(items)
                                     _state.value = _state.value.copy(
-                                        items = items,
-                                        nowNext = items.associateNotNull { item -> liveNowNextCache[item.id]?.let { item.id to it } },
+                                        items = visibleItems,
+                                        nowNext = visibleItems.associateNotNull { item -> liveNowNextCache[item.id]?.let { item.id to it } },
                                         loading = false
                                     )
+                                }
+                            } else if (_state.value.section == TvSection.LIVE && isUserStateCategory(_state.value.selectedCategory)) {
+                                withContext(Dispatchers.Main) {
+                                    publishCurrentLiveSelection(forceLoading = false)
                                 }
                             }
                         }
@@ -662,9 +697,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun mapLiveStreams(streams: List<LiveStream>): List<TvContentItem> {
-        val favorites = if (_state.value.settings.momMode) userStateRepo.favorites() else emptySet()
-        val items = streams.map {
+    private fun mapLiveStreams(streams: List<LiveStream>): List<TvContentItem> {
+        return streams.map {
             TvContentItem(
                 id = it.streamId,
                 title = it.name,
@@ -674,7 +708,83 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                 section = TvSection.LIVE
             )
         }
-        return if (_state.value.settings.momMode) items.filter { it.id in favorites } else items
+    }
+
+    private fun withUserStateCategories(categories: List<Category>): List<Category> = buildList {
+        add(Category(CATEGORY_ID_FAVORITES, "★ Favorites", null))
+        add(Category(CATEGORY_ID_RECENT, "↺ Recently Watched", null))
+        addAll(categories)
+    }
+
+    private fun isUserStateCategory(categoryId: String?): Boolean =
+        categoryId == CATEGORY_ID_FAVORITES || categoryId == CATEGORY_ID_RECENT
+
+    private fun cachedDisplayItemsFor(categoryId: String?): List<TvContentItem>? = when {
+        categoryId == null -> null
+        categoryId == CATEGORY_ID_FAVORITES -> displayedItemsForFavorites().takeIf { it.isNotEmpty() }
+        categoryId == CATEGORY_ID_RECENT -> displayedItemsForRecents().takeIf { it.isNotEmpty() }
+        else -> liveItemsCache[categoryId]?.let(::applyLiveFilters)
+    }
+
+    private fun displayedItemsForCategory(categoryId: String?): List<TvContentItem> = when (categoryId) {
+        CATEGORY_ID_FAVORITES -> displayedItemsForFavorites()
+        CATEGORY_ID_RECENT -> displayedItemsForRecents()
+        else -> applyLiveFilters(liveItemsCache[categoryId].orEmpty())
+    }
+
+    private fun displayedItemsForFavorites(): List<TvContentItem> {
+        val favorites = _state.value.favorites.toList()
+        if (favorites.isEmpty()) return emptyList()
+        return dedupeLiveItems()
+            .filter { it.id in favorites }
+            .sortedBy { favoritesOrder(it.id) }
+    }
+
+    private fun displayedItemsForRecents(): List<TvContentItem> {
+        val recents = _state.value.recentChannelIds
+        if (recents.isEmpty()) return emptyList()
+        val byId = dedupeLiveItems().associateBy { it.id }
+        return recents.mapNotNull(byId::get)
+    }
+
+    private fun dedupeLiveItems(): List<TvContentItem> =
+        liveItemsCache.values.asSequence().flatten().associateBy { it.id }.values.toList()
+
+    private suspend fun ensureUserStateCategorySeeded() {
+        if (dedupeLiveItems().isNotEmpty()) return
+        val allItems = mapLiveStreams(repo.liveStreams(null))
+        liveItemsCache[null] = allItems
+    }
+
+    private fun favoritesOrder(channelId: Int): Int {
+        val index = _state.value.favorites.toList().indexOf(channelId)
+        return if (index >= 0) index else Int.MAX_VALUE
+    }
+
+    private suspend fun refreshUserState() {
+        _state.value = _state.value.copy(
+            favorites = userStateRepo.favorites(),
+            recentChannelIds = userStateRepo.recentChannels()
+        )
+    }
+
+    private fun applyLiveFilters(items: List<TvContentItem>): List<TvContentItem> {
+        if (!_state.value.settings.momMode) return items
+        val favorites = _state.value.favorites
+        return items.filter { it.id in favorites }
+    }
+
+    private fun publishCurrentLiveSelection(forceLoading: Boolean) {
+        val current = _state.value
+        if (current.section != TvSection.LIVE) return
+        val selectedCategory = current.selectedCategory ?: return
+        val items = displayedItemsForCategory(selectedCategory)
+        _state.value = current.copy(
+            items = items,
+            nowNext = items.associateNotNull { item -> liveNowNextCache[item.id]?.let { item.id to it } },
+            loading = forceLoading && items.isEmpty(),
+            error = null
+        )
     }
 
     private inline fun <T, K, V> Iterable<T>.associateNotNull(transform: (T) -> Pair<K, V>?): Map<K, V> =
@@ -683,5 +793,10 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                 transform(item)?.let { (key, value) -> put(key, value) }
             }
         }
+
+    companion object {
+        private const val CATEGORY_ID_FAVORITES = "__favorites__"
+        private const val CATEGORY_ID_RECENT = "__recent__"
+    }
 
 }

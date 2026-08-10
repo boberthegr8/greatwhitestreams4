@@ -368,7 +368,15 @@ private fun GuideGrid(
         }
     ) {
         items(items, key = { "g-${it.id}" }) { item ->
-            GuideRow(item, state.nowNext[item.id], nowSec, state.lastPlayedChannelId == item.id, onPlay, onFocus)
+            GuideRow(
+                item = item,
+                nowNext = state.nowNext[item.id],
+                nowSec = nowSec,
+                isPlaying = state.lastPlayedChannelId == item.id,
+                isFavorite = item.id in state.favorites,
+                onPlay = onPlay,
+                onFocus = onFocus
+            )
         }
     }
     }
@@ -380,6 +388,7 @@ private fun GuideRow(
     nowNext: NowNext?,
     nowSec: Long,
     isPlaying: Boolean,
+    isFavorite: Boolean,
     onPlay: (TvContentItem) -> Unit,
     onFocus: (TvContentItem) -> Unit = {}
 ) {
@@ -430,13 +439,19 @@ private fun GuideRow(
                     modifier = Modifier.size(44.dp).clip(RoundedCornerShape(6.dp))
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    item.title,
-                    style = TvType.bodyMedium,
-                    color = TextHi,
-                    maxLines = 1,
-                    modifier = if (focused) Modifier.basicMarquee() else Modifier
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        item.title,
+                        style = TvType.bodyMedium,
+                        color = TextHi,
+                        maxLines = 1,
+                        modifier = if (focused) Modifier.weight(1f, fill = false).basicMarquee() else Modifier
+                    )
+                    if (isFavorite) {
+                        Spacer(Modifier.width(6.dp))
+                        Text("★", color = Color(0xFFFFD54F), style = TvType.labelSmall)
+                    }
+                }
             }
             // Programme blocks
             Row(

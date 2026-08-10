@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Settings
@@ -97,8 +99,10 @@ fun TvPlayerScreen(
     item: TvContentItem,
     items: List<TvContentItem> = emptyList(),
     bufferSeconds: Int,
+    isFavorite: Boolean = false,
     onBack: () -> Unit,
-    onZap: (TvContentItem?) -> Unit = {}
+    onZap: (TvContentItem?) -> Unit = {},
+    onToggleFavorite: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
     val repo = remember(context.applicationContext) { XtreamRepository(context.applicationContext) }
@@ -465,6 +469,20 @@ fun TvPlayerScreen(
                             requestReconnect(fromPlaybackFailure = false, userInitiated = true)
                         }
                     )
+                    if (startsLive) {
+                        OsdIconButton(
+                            key = "favorite",
+                            icon = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            label = if (isFavorite) "Unfavorite" else "Favorite",
+                            onFocusChange = { focused ->
+                                focusedOsdControl = if (focused) "favorite" else focusedOsdControl.takeUnless { it == "favorite" }
+                            },
+                            onClick = {
+                                onToggleFavorite(item.id)
+                                revealOsd()
+                            }
+                        )
+                    }
                     OsdIconButton(
                         key = "buffer",
                         icon = Icons.Filled.Speed,
