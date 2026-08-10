@@ -1,8 +1,8 @@
 {
-  "versionCode": 20,
-  "versionName": "4.20",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.20-playback-hotfix.apk",
-  "releaseNotes": "Hotfix for v4.18 playback regression: Live user-state persistence is now non-fatal so playback cannot crash/restart to login if Room/history writes fail, and player repository construction is restored to the known-good v4.17 pattern. Includes v4.19 Favorites and Recently Watched UI.",
+  "versionCode": 21,
+  "versionName": "4.21",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.21-crash-diagnostics.apk",
+  "releaseNotes": "Adds local redacted crash diagnostics so future app crashes no longer silently look like a logout. Last crash notices appear on login and in Settings, with credentials and obvious tokens redacted. Includes the v4.20 playback hotfix plus Favorites and Recently Watched.",
   "mandatory": false,
-  "sha256": "54a1c3fd296003856e1160a18bdb068be172835cd8d9b82d6418a387fbf2e85d"
+  "sha256": "711261bd607de9c2e5753583fe73a716f76d4ed25317da20ce817f2ce43a9294"
 }
