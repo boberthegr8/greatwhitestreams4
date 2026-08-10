@@ -2,6 +2,7 @@ package com.gwstreams.tv.data
 
 import android.content.Context
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -90,15 +91,34 @@ object Updater {
     }
 
     fun openUnknownAppSettings(context: Context) {
-        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val packageManager = context.packageManager
+        val packageIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
                 data = Uri.parse("package:${context.packageName}")
             }
         } else {
-            Intent(Settings.ACTION_SECURITY_SETTINGS)
+            null
         }
+        val fallbackIntent = Intent(Settings.ACTION_SECURITY_SETTINGS)
+        val intent = when {
+            packageIntent?.resolveActivity(packageManager) != null -> packageIntent
+            fallbackIntent.resolveActivity(packageManager) != null -> fallbackIntent
+            else -> null
+        } ?: return
+
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            if (intent.action != Settings.ACTION_SECURITY_SETTINGS &&
+                fallbackIntent.resolveActivity(packageManager) != null
+            ) {
+                runCatching {
+                    fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(fallbackIntent)
+                }
+            }
+        }
     }
 
     suspend fun downloadAndInstall(
@@ -158,10 +178,17 @@ object Updater {
         }
 
         val handlers = context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        check(handlers.isNotEmpty()) {
+            "No app is available to install the downloaded update package."
+        }
         handlers.forEach { handler ->
             context.grantUriPermission(handler.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(intent)
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            throw IllegalStateException("Unable to launch the package installer for the downloaded update.", e)
+        }
     }
 
     private fun sha256(file: File): String {

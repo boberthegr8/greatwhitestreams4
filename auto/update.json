@@ -1,8 +1,8 @@
 {
-  "versionCode": 28,
-  "versionName": "4.28 Crash/Signing/DNS Hardening",
+  "versionCode": 29,
+  "versionName": "4.29 Updater Installer Fallback",
   "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
-  "releaseNotes": "Hardening sweep: makes crash restart use a real safe startActivity fallback instead of retrying the same AlarmManager path, removes hardcoded release-signing secrets from source in favour of ignored local/env signing config, adds a provider-aware empty DNS feed so global portal override stays disabled and verifiable, and removes a stale tracked v4.24 APK. Yes, housekeeping. Boring is what stable looks like.",
+  "releaseNotes": "Updater reliability hardening: unknown-sources settings now falls back cleanly instead of crashing when Android TV hides the package-specific screen, and APK install launch now fails with a clear message if no installer handler exists. Tiny fix, but update paths should not detonate while trying to fix detonations.",
   "mandatory": true,
-  "sha256": "ff9bb1d72bf8a7ba52b0de2ac47492b35cc874f185ece0504d5c6f81878a14ae"
+  "sha256": "c1292744263a30965b4a52e6ca19c9cb0f264a71e203900ca9d53469f0412eb6"
 }
