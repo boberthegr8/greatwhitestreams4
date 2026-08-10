@@ -69,24 +69,6 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
         if (pass.isEmpty() && state.savedPass.isNotEmpty()) pass = state.savedPass
     }
 
-    // Auto-fill Bobert credentials
-    LaunchedEffect(selectedProvider) {
-        if (selectedProvider == Provider.BOBERT) {
-            user = "Saralam1028"
-            pass = "NBkuyhVoRT"
-        } else {
-            user = ""
-            pass = ""
-        }
-    }
-
-    // Ensure we start with Bobert pre-filled if it's the initial default
-    LaunchedEffect(Unit) {
-        if (selectedProvider == Provider.BOBERT && user.isEmpty()) {
-            user = "Saralam1028"
-            pass = "NBkuyhVoRT"
-        }
-    }
 
     Box(
         Modifier.fillMaxSize().background(Midnight),
