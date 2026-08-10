@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.gwstreams.tv.BuildConfig
+import com.gwstreams.tv.data.CrashReporter
 import com.gwstreams.tv.data.Updater
 import com.gwstreams.tv.ui.TvViewModel
 import com.gwstreams.tv.ui.theme.*
@@ -93,6 +94,10 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
     ) {
         if (state.autoLoggingIn) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                state.lastCrashSummary?.let { summary ->
+                    CrashNoticeCard(summary = summary, onClear = vm::clearCrashReport)
+                    Spacer(Modifier.height(20.dp))
+                }
                 Text("Great White Streams", style = TvType.displayMedium, color = TextHi)
                 Spacer(Modifier.height(20.dp))
                 CircularProgressIndicator(color = Aqua)
@@ -108,6 +113,14 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                 Modifier.width(560.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                state.lastCrashSummary?.let { summary ->
+                    CrashNoticeCard(
+                        summary = summary,
+                        onClear = vm::clearCrashReport,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(20.dp))
+                }
                 Text("Great White Streams", style = TvType.displayMedium, color = TextHi)
                 Spacer(Modifier.height(8.dp))
                 Text("Sign in to your service", style = TvType.bodyLarge, color = TextMid)
@@ -232,6 +245,45 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun CrashNoticeCard(
+    summary: CrashReporter.CrashSummary,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = SurfaceHi,
+        modifier = modifier
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("Recovered from an app crash", style = TvType.titleLarge, color = Coral)
+            Spacer(Modifier.height(8.dp))
+            Text(summary.displayMessage, style = TvType.bodyMedium, color = TextHi)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${summary.timestamp} • ${summary.threadName} • ${summary.appVersion}",
+                style = TvType.labelSmall,
+                color = TextLow
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "A redacted report is saved locally on this device only.",
+                style = TvType.labelSmall,
+                color = TextMid
+            )
+            Spacer(Modifier.height(14.dp))
+            Button(
+                onClick = onClear,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Surface1, contentColor = TextHi)
+            ) {
+                Text("Clear crash notice")
+            }
         }
     }
 }

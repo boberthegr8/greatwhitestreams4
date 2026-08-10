@@ -199,6 +199,44 @@ fun TvSettingsScreen(vm: TvViewModel, onLogout: () -> Unit) {
 
         item {
             Spacer(Modifier.height(10.dp))
+            SettingSection("Crash diagnostics")
+        }
+        item {
+            Surface(
+                color = Surface1,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val crashSummary = state.lastCrashSummary
+                    if (crashSummary == null) {
+                        Text(
+                            "No saved crash report on this device.",
+                            style = TvType.bodyMedium,
+                            color = TextMid
+                        )
+                    } else {
+                        Text(crashSummary.displayMessage, style = TvType.titleMedium, color = TextHi)
+                        Text(
+                            "${crashSummary.timestamp} • ${crashSummary.threadName}",
+                            style = TvType.bodyMedium,
+                            color = TextMid
+                        )
+                        Text(
+                            "Saved locally only. Credentials and obvious tokens are redacted.",
+                            style = TvType.bodyMedium,
+                            color = TextLow
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            FocusButton("Clear crash report", onClick = vm::clearCrashReport)
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(10.dp))
             SettingSection("Live categories — select to hide / show")
         }
         val liveCats = vm.allCategoriesForSection(TvSection.LIVE)

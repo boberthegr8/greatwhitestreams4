@@ -8,6 +8,7 @@ import com.gwstreams.app.data.model.SeriesInfoResponse
 import com.gwstreams.app.data.model.Category
 import com.gwstreams.app.data.model.LiveStream
 import com.gwstreams.tv.BuildConfig
+import com.gwstreams.tv.data.CrashReporter
 import com.gwstreams.tv.data.DnsBootstrapper
 import com.gwstreams.tv.data.Updater
 import com.gwstreams.tv.data.UserStateRepository
@@ -62,7 +63,8 @@ data class TvUiState(
     val appUpdate: AppUpdateState = AppUpdateState(),
     val lastPlayedChannelId: Int? = null,
     val favorites: Set<Int> = emptySet(),
-    val recentChannelIds: List<Int> = emptyList()
+    val recentChannelIds: List<Int> = emptyList(),
+    val lastCrashSummary: CrashReporter.CrashSummary? = null
 )
 
 @androidx.compose.runtime.Immutable
@@ -100,7 +102,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.value = _state.value.copy(
                 settings = settingsRepo.load(),
-                lastPlayedChannelId = userStateRepo.lastPlayedChannelId()
+                lastPlayedChannelId = userStateRepo.lastPlayedChannelId(),
+                lastCrashSummary = CrashReporter.readLastCrashSummary(app)
             )
             refreshUserState()
 
@@ -516,13 +519,28 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun sendErrorReport() {
         viewModelScope.launch {
             try {
+                val crashSummary = CrashReporter.readLastCrashSummary(getApplication())
+                val crashDetails = CrashReporter.readLastCrashDetails(getApplication())
                 // Collect basic debug data
                 val dump = org.json.JSONObject().apply {
                     put("content", "Error Report from TV App")
                     val embeds = org.json.JSONArray()
                     val embed = org.json.JSONObject()
                     embed.put("title", "Diagnostic Dump")
-                    embed.put("description", "Host: ${Session.host}\nUser: ${Session.username}\nError State: ${_state.value.error ?: "None"}")
+                    embed.put(
+                        "description",
+                        buildString {
+                            append("App version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                            append("\nUI error state: ${_state.value.error ?: "None"}")
+                            crashSummary?.let {
+                                append("\nLast crash: ${it.timestamp} on ${it.threadName}")
+                                append("\n${it.displayMessage}")
+                            }
+                            crashDetails?.lineSequence()?.firstOrNull()?.takeIf { it.isNotBlank() }?.let {
+                                append("\nTrace: $it")
+                            }
+                        }
+                    )
                     embed.put("color", 16711680) // Red
                     embeds.put(embed)
                     put("embeds", embeds)
@@ -545,6 +563,11 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
                 // Ignore silent failure
             }
         }
+    }
+
+    fun clearCrashReport() {
+        CrashReporter.clearLastCrash(getApplication())
+        _state.value = _state.value.copy(lastCrashSummary = null)
     }
 
     fun toggleCategoryHidden(categoryId: String) {
@@ -576,7 +599,10 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         liveNowNextCache.clear()
         livePrefetchJob?.cancel()
         viewModelScope.launch { creds.clear() }
-        _state.value = TvUiState(settings = _state.value.settings)
+        _state.value = TvUiState(
+            settings = _state.value.settings,
+            lastCrashSummary = _state.value.lastCrashSummary
+        )
     }
 
     fun onPlayItem(item: TvContentItem) {

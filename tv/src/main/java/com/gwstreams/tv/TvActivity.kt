@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
 import coil.imageLoader
+import com.gwstreams.tv.data.CrashReporter
 import com.gwstreams.tv.ui.TvContentItem
 import com.gwstreams.tv.ui.TvSection
 import com.gwstreams.tv.ui.TvViewModel
@@ -67,12 +68,15 @@ class TvActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.setFormat(android.graphics.PixelFormat.TRANSLUCENT)
 
-        Thread.setDefaultUncaughtExceptionHandler { _, _ ->
-            val intent = android.content.Intent(this, TvActivity::class.java).apply {
-                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            CrashReporter.recordUncaughtException(applicationContext, thread, throwable)
+            restartAfterCrash()
+            defaultHandler?.let {
+                runCatching { it.uncaughtException(thread, throwable) }
             }
-            startActivity(intent)
             android.os.Process.killProcess(android.os.Process.myPid())
+            kotlin.system.exitProcess(10)
         }
 
         setContent {
@@ -249,6 +253,26 @@ class TvActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun restartAfterCrash() {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        } ?: android.content.Intent(this, TvActivity::class.java).apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            this,
+            1001,
+            launchIntent,
+            android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
+        alarmManager?.setExact(
+            android.app.AlarmManager.RTC,
+            System.currentTimeMillis() + 500,
+            pendingIntent
+        )
     }
 
     override fun onTrimMemory(level: Int) {
