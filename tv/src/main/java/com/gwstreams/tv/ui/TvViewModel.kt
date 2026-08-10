@@ -64,7 +64,8 @@ data class TvUiState(
     val lastPlayedChannelId: Int? = null,
     val favorites: Set<Int> = emptySet(),
     val recentChannelIds: List<Int> = emptyList(),
-    val lastCrashSummary: CrashReporter.CrashSummary? = null
+    val lastCrashSummary: CrashReporter.CrashSummary? = null,
+    val lastCrashDetails: String? = null
 )
 
 @androidx.compose.runtime.Immutable
@@ -516,58 +517,17 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun sendErrorReport() {
-        viewModelScope.launch {
-            try {
-                val crashSummary = CrashReporter.readLastCrashSummary(getApplication())
-                val crashDetails = CrashReporter.readLastCrashDetails(getApplication())
-                // Collect basic debug data
-                val dump = org.json.JSONObject().apply {
-                    put("content", "Error Report from TV App")
-                    val embeds = org.json.JSONArray()
-                    val embed = org.json.JSONObject()
-                    embed.put("title", "Diagnostic Dump")
-                    embed.put(
-                        "description",
-                        buildString {
-                            append("App version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                            append("\nUI error state: ${_state.value.error ?: "None"}")
-                            crashSummary?.let {
-                                append("\nLast crash: ${it.timestamp} on ${it.threadName}")
-                                append("\n${it.displayMessage}")
-                            }
-                            crashDetails?.lineSequence()?.firstOrNull()?.takeIf { it.isNotBlank() }?.let {
-                                append("\nTrace: $it")
-                            }
-                        }
-                    )
-                    embed.put("color", 16711680) // Red
-                    embeds.put(embed)
-                    put("embeds", embeds)
-                }
-                
-                // Fire to Discord webhook (Rob needs to replace this URL)
-                val webhookUrl = "https://discord.com/api/webhooks/REPLACE_ME"
-                if (!webhookUrl.contains("REPLACE_ME")) {
-                    withContext(Dispatchers.IO) {
-                        val conn = java.net.URL(webhookUrl).openConnection() as java.net.HttpURLConnection
-                        conn.requestMethod = "POST"
-                        conn.setRequestProperty("Content-Type", "application/json")
-                        conn.doOutput = true
-                        conn.outputStream.write(dump.toString().toByteArray())
-                        conn.responseCode
-                        conn.disconnect()
-                    }
-                }
-            } catch (e: Exception) {
-                // Ignore silent failure
-            }
-        }
+    fun loadCrashDetails() {
+        val app = getApplication<Application>()
+        _state.value = _state.value.copy(
+            lastCrashSummary = CrashReporter.readLastCrashSummary(app),
+            lastCrashDetails = CrashReporter.readLastCrashDetails(app)
+        )
     }
 
     fun clearCrashReport() {
         CrashReporter.clearLastCrash(getApplication())
-        _state.value = _state.value.copy(lastCrashSummary = null)
+        _state.value = _state.value.copy(lastCrashSummary = null, lastCrashDetails = null)
     }
 
     fun toggleCategoryHidden(categoryId: String) {
@@ -601,7 +561,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { creds.clear() }
         _state.value = TvUiState(
             settings = _state.value.settings,
-            lastCrashSummary = _state.value.lastCrashSummary
+            lastCrashSummary = _state.value.lastCrashSummary,
+            lastCrashDetails = _state.value.lastCrashDetails
         )
     }
 

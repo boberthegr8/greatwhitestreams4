@@ -69,6 +69,7 @@ fun TvSettingsScreen(vm: TvViewModel, onLogout: () -> Unit) {
     val s = state.settings
     val appUpdate = state.appUpdate
     val context = LocalContext.current
+    var showCrashDetails by remember { mutableStateOf(false) }
 
     LazyColumn(
         contentPadding = PaddingValues(40.dp),
@@ -223,11 +224,23 @@ fun TvSettingsScreen(vm: TvViewModel, onLogout: () -> Unit) {
                             color = TextMid
                         )
                         Text(
+                            "App version: ${crashSummary.appVersion}",
+                            style = TvType.bodyMedium,
+                            color = TextMid
+                        )
+                        Text(
                             "Saved locally only. Credentials and obvious tokens are redacted.",
                             style = TvType.bodyMedium,
                             color = TextLow
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            FocusButton(
+                                "View redacted details",
+                                onClick = {
+                                    vm.loadCrashDetails()
+                                    showCrashDetails = true
+                                }
+                            )
                             FocusButton("Clear crash report", onClick = vm::clearCrashReport)
                         }
                     }
@@ -255,18 +268,19 @@ fun TvSettingsScreen(vm: TvViewModel, onLogout: () -> Unit) {
                 FocusButton("Nuke It (Clear Cache & Restart)", onClick = { vm.nukeAndRestart(context) })
             }
         }
+    }
 
-        item {
-            Spacer(Modifier.height(10.dp))
-            var reportSent by remember { mutableStateOf(false) }
-            FocusButton(
-                if (reportSent) "Report Sent ✓" else "Send Error Report to Rob",
-                onClick = {
-                    vm.sendErrorReport()
-                    reportSent = true
-                }
-            )
-        }
+    val crashSummary = state.lastCrashSummary
+    if (showCrashDetails && crashSummary != null) {
+        CrashDetailsDialog(
+            summary = crashSummary,
+            details = state.lastCrashDetails,
+            onDismiss = { showCrashDetails = false },
+            onClear = {
+                vm.clearCrashReport()
+                showCrashDetails = false
+            }
+        )
     }
 
     val visibleUpdate = appUpdate.availableUpdate?.takeIf {
@@ -283,6 +297,63 @@ fun TvSettingsScreen(vm: TvViewModel, onLogout: () -> Unit) {
             onDismiss = { vm.dismissUpdatePrompt() },
             onUpdate = { vm.beginAppUpdate(context) }
         )
+    }
+}
+
+@Composable
+private fun CrashDetailsDialog(
+    summary: com.gwstreams.tv.data.CrashReporter.CrashSummary,
+    details: String?,
+    onDismiss: () -> Unit,
+    onClear: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = SurfaceHi,
+            modifier = Modifier.widthIn(max = 860.dp)
+        ) {
+            Column(
+                Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text("Crash details", style = TvType.headlineMedium, color = TextHi)
+                Text(summary.displayMessage, style = TvType.titleMedium, color = Aqua)
+                Text(
+                    "${summary.timestamp} • ${summary.threadName} • ${summary.appVersion}",
+                    style = TvType.bodyMedium,
+                    color = TextMid
+                )
+                Text(
+                    "Stored only on this device. Sensitive values stay redacted.",
+                    style = TvType.bodyMedium,
+                    color = TextLow
+                )
+                Surface(
+                    color = Surface1,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = details ?: "No saved stack trace for this crash.",
+                        style = TvType.bodyMedium,
+                        color = TextHi,
+                        modifier = Modifier.padding(18.dp)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        FocusButton("Clear crash report", onClick = onClear)
+                        FocusButton("Close", onClick = onDismiss)
+                    }
+                }
+            }
+        }
     }
 }
 
