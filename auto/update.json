@@ -1,8 +1,8 @@
 {
-  "versionCode": 24,
-  "versionName": "4.24",
+  "versionCode": 25,
+  "versionName": "4.25",
   "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
-  "releaseNotes": "Hotfixes Android TV login navigation: D-pad can move through Provider, Username, Password, Save Login, and Sign In; password Done can submit. App update check now runs immediately at startup and the update prompt blocks leaving Login until handled.",
+  "releaseNotes": "Stability build: fixes playback hard crash by adding WAKE_LOCK permission, restores editable DNS/server URL for every provider preset, prevents Search from stealing playback/navigation focus, and adds Phone / QR setup so clients can enter DNS, username, and password from a phone on the same LAN. QR setup does not send saved credentials to the phone page.",
   "mandatory": true,
-  "sha256": "a515e964048645d8bc2d2f0505207cbd90f25b8911616ff1411f912a6b081b08"
+  "sha256": "933eca1e950cbd1c57d06f5ec46d42d3a904c1a5ffeb3036b9ccb07fa9896d5c"
 }
