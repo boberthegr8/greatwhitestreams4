@@ -1,8 +1,8 @@
 {
-  "versionCode": 17,
-  "versionName": "4.17",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.17-stream-epg-osd.apk",
-  "releaseNotes": "Fixes live streams dropping after a few minutes with stronger reconnect handling, adds a focused Reconnect/Restart control to the player OSD, removes the useless Aspect button, keeps previous-channel thumbnails, switches Live categories on focus, and starts caching channels plus EPG/now-next data for all Live categories in the background.",
+  "versionCode": 18,
+  "versionName": "4.18",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.18-foundation-room.apk",
+  "releaseNotes": "Stability foundation release: adds migration-safe Room user-state database, moves Live TV favorites/recents/last-channel foundation onto Room while preserving existing DataStore data, fixes Android cache storage, cleans boot/cable-box mode handling, and preserves the GitHub self-updater.",
   "mandatory": false,
-  "sha256": "e2d2f163bdc29cdaedbab11223e3d8cd823d7b6d369554ba124d0f5dfa20141b"
+  "sha256": "fc3c7e290f782d1d8bbf1a9a64b6e52cbc35eaae9e3a896b3b6025217b38dc67"
 }
