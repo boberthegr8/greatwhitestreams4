@@ -1,8 +1,8 @@
 {
-  "versionCode": 23,
-  "versionName": "4.23",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.23-crash-details.apk",
-  "releaseNotes": "Improves crash diagnostics: Settings can now open local redacted crash details/stack trace, and the dead remote 'Send Error Report' placeholder has been removed. Crash reports stay on-device. Includes v4.22 hardcoded login removal, v4.21 diagnostics, and v4.20 playback hotfix.",
-  "mandatory": false,
-  "sha256": "1cdc306e72bf017ff693b1e2ade867d6c323eeeed04706240c5e29edcc0a4ef7"
+  "versionCode": 24,
+  "versionName": "4.24",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
+  "releaseNotes": "Hotfixes Android TV login navigation: D-pad can move through Provider, Username, Password, Save Login, and Sign In; password Done can submit. App update check now runs immediately at startup and the update prompt blocks leaving Login until handled.",
+  "mandatory": true,
+  "sha256": "a515e964048645d8bc2d2f0505207cbd90f25b8911616ff1411f912a6b081b08"
 }
