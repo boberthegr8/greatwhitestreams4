@@ -4,5 +4,5 @@
   "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
   "releaseNotes": "Stable edition hardening: protects startup from corrupted local Room/DataStore reads, prevents crash-restart recovery from throwing exact-alarm errors, keeps each provider DNS/server URL authoritative instead of applying a broken global DNS override, hardens Phone / QR setup with a one-time tokenized pairing URL, and tightens TV focus restoration after dialogs/text-field Back. Update is mandatory and appears on app open.",
   "mandatory": true,
-  "sha256": "285b305018d9ad8186f5165db05415eafa9d3914b8758e3b5b3164e37b7dffa1"
+  "sha256": "66fb45d964d19d819690ca8fde0bf07b5a08eec13510ea02de35b04d0f0057bf"
 }
