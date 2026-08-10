@@ -41,14 +41,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import com.gwstreams.app.data.repo.Session
-import androidx.media3.common.MimeTypes
 
 import coil.compose.AsyncImage
 import com.gwstreams.app.data.repo.NowNext
@@ -73,6 +73,7 @@ private val BrowseSections = listOf(
 )
 
 @Composable
+@UnstableApi
 fun TvLiveScreen(
     vm: TvViewModel,
     nowSec: Long,
@@ -655,6 +656,7 @@ fun TvSection.icon() = when (this) {
 
 
 @Composable
+@UnstableApi
 fun BackgroundVideoPlayer(url: String, isLive: Boolean) {
     if (url.isBlank()) {
         Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F1115)))

@@ -1,5 +1,6 @@
 package com.gwstreams.tv.ui.live
 
+import android.util.Base64
 import android.os.Handler
 import android.os.Looper
 import fi.iki.elonen.NanoHTTPD
@@ -7,7 +8,6 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.SocketException
 import java.security.SecureRandom
-import java.util.Base64
 import java.util.concurrent.atomic.AtomicBoolean
 
 internal data class PhoneSetupSubmission(
@@ -22,18 +22,26 @@ internal data class PhoneSetupSubmission(
 internal data class PhoneSetupSession(
     val url: String,
     val hostAddress: String,
-    val port: Int
+    val port: Int,
+    val expiresAtElapsedRealtimeMs: Long
 )
 
 internal class PhoneSetupServer(
     private val providers: List<Provider>,
     private val selectedProvider: Provider,
     private val initialHost: String,
-    private val onSubmission: (PhoneSetupSubmission) -> Unit
+    private val onSubmission: (PhoneSetupSubmission) -> Unit,
+    private val onExpired: (() -> Unit)? = null
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var server: SetupHttpServer? = null
     private val secureRandom = SecureRandom()
+    private val expiryRunnable = Runnable {
+        if (server != null) {
+            stop()
+            onExpired?.invoke()
+        }
+    }
 
     fun start(): Result<PhoneSetupSession> {
         stop()
@@ -46,13 +54,17 @@ internal class PhoneSetupServer(
             try {
                 val token = generateSessionToken()
                 val candidate = SetupHttpServer(port = port, token = token)
+                val expiresAtElapsedRealtimeMs = android.os.SystemClock.elapsedRealtime() + SESSION_TTL_MS
                 candidate.start(SOCKET_READ_TIMEOUT, false)
                 server = candidate
+                mainHandler.removeCallbacks(expiryRunnable)
+                mainHandler.postDelayed(expiryRunnable, SESSION_TTL_MS)
                 return Result.success(
                     PhoneSetupSession(
                         url = "http://$hostAddress:${candidate.listeningPort}${candidate.pairPath}",
                         hostAddress = hostAddress,
-                        port = candidate.listeningPort
+                        port = candidate.listeningPort,
+                        expiresAtElapsedRealtimeMs = expiresAtElapsedRealtimeMs
                     )
                 )
             } catch (error: Throwable) {
@@ -64,6 +76,7 @@ internal class PhoneSetupServer(
     }
 
     fun stop() {
+        mainHandler.removeCallbacks(expiryRunnable)
         server?.stop()
         server = null
     }
@@ -74,10 +87,15 @@ internal class PhoneSetupServer(
     ) : NanoHTTPD(port) {
         val pairPath: String = "/pair/$token"
         private val submissionConsumed = AtomicBoolean(false)
+        private val expiresAtElapsedRealtimeMs = android.os.SystemClock.elapsedRealtime() + SESSION_TTL_MS
 
         override fun serve(session: IHTTPSession): Response {
             if (session.uri != pairPath) {
                 return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+            }
+            if (android.os.SystemClock.elapsedRealtime() >= expiresAtElapsedRealtimeMs) {
+                mainHandler.post(expiryRunnable)
+                return newFixedLengthResponse(Response.Status.GONE, MIME_PLAINTEXT, "This setup link has expired. Re-open Phone / QR setup on the TV for a new link.")
             }
             if (submissionConsumed.get()) {
                 return newFixedLengthResponse(Response.Status.GONE, MIME_PLAINTEXT, "This setup link has already been used.")
@@ -232,7 +250,7 @@ internal class PhoneSetupServer(
     private fun generateSessionToken(): String {
         val bytes = ByteArray(18)
         secureRandom.nextBytes(bytes)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
 
     private fun findLocalIpv4Address(): String? {
@@ -255,5 +273,6 @@ internal class PhoneSetupServer(
 
     companion object {
         private const val SOCKET_READ_TIMEOUT = 5_000
+        internal const val SESSION_TTL_MS = 5 * 60 * 1000L
     }
 }

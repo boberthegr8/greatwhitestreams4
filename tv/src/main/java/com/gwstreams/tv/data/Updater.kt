@@ -25,6 +25,7 @@ object Updater {
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 30_000
     private const val MAX_REDIRECTS = 5
+    private val SHA256_REGEX = Regex("^[a-fA-F0-9]{64}$")
 
     @Immutable
     data class UpdateInfo(
@@ -62,7 +63,10 @@ object Updater {
                             .ifBlank { json.optString("release_notes", "") }
                             .ifBlank { "Bug fixes and performance updates." },
                         mandatory = json.optBoolean("mandatory", false),
-                        sha256 = json.optString("sha256", "").takeIf { it.isNotBlank() }
+                        sha256 = requireValidSha256(
+                            json.optString("sha256", "").takeIf { it.isNotBlank() },
+                            source = "update metadata"
+                        )
                     )
                 } else {
                     null
@@ -103,6 +107,7 @@ object Updater {
         onProgress: (Int) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            val expectedSha256 = requireValidSha256(info.sha256, source = "update package")
             val updateRoot = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.cacheDir
             val updateDir = File(updateRoot, "updates").apply { mkdirs() }
             val apkFile = File(updateDir, "gws-update-${info.versionCode}.apk")
@@ -130,11 +135,9 @@ object Updater {
             }
             onProgress(100)
 
-            info.sha256?.let { expected ->
-                val actual = sha256(apkFile)
-                check(actual.equals(expected, ignoreCase = true)) {
-                    "Downloaded APK checksum mismatch"
-                }
+            val actual = sha256(apkFile)
+            check(actual.equals(expectedSha256, ignoreCase = true)) {
+                "Downloaded APK checksum mismatch"
             }
 
             withContext(Dispatchers.Main) {
@@ -172,6 +175,13 @@ object Updater {
             }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }.lowercase(Locale.US)
+    }
+
+    private fun requireValidSha256(value: String?, source: String): String {
+        val normalized = value?.trim()?.lowercase(Locale.US)
+        require(!normalized.isNullOrBlank()) { "Missing SHA-256 for $source" }
+        require(SHA256_REGEX.matches(normalized)) { "Invalid SHA-256 for $source" }
+        return normalized
     }
 
     private fun openConnection(url: String, accept: String): HttpURLConnection {

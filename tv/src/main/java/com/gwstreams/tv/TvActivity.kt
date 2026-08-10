@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkRequest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -58,7 +59,7 @@ class TvActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (isLivePlayerMode) {
+        if (isLivePlayerMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().build())
         }
     }
@@ -280,21 +281,12 @@ class TvActivity : ComponentActivity() {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
         val triggerAtMillis = System.currentTimeMillis() + 500
         try {
-            alarmManager?.setExact(
+            // Best-effort crash restart only; avoid exact-alarm permission/runtime traps.
+            alarmManager?.set(
                 android.app.AlarmManager.RTC,
                 triggerAtMillis,
                 pendingIntent
             )
-        } catch (securityException: SecurityException) {
-            try {
-                alarmManager?.set(
-                    android.app.AlarmManager.RTC,
-                    triggerAtMillis,
-                    pendingIntent
-                )
-            } catch (_: Exception) {
-                // Never crash the crash handler while attempting a best-effort restart.
-            }
         } catch (_: Exception) {
             try {
                 alarmManager?.set(

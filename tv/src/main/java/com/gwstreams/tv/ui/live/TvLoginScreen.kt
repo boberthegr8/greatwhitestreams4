@@ -36,6 +36,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,6 +73,7 @@ import com.gwstreams.tv.ui.theme.TextHi
 import com.gwstreams.tv.ui.theme.TextLow
 import com.gwstreams.tv.ui.theme.TextMid
 import com.gwstreams.tv.ui.theme.TvType
+import kotlinx.coroutines.delay
 
 private val DialogFocusDelayMs = 75L
 
@@ -403,12 +405,17 @@ private fun PhoneSetupDialog(
     var session by remember { mutableStateOf<PhoneSetupSession?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var submissionReceived by remember { mutableStateOf(false) }
+    var nowElapsedRealtimeMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
 
     DisposableEffect(selectedProvider, host, user, pass) {
         val server = PhoneSetupServer(
             providers = Provider.entries,
             selectedProvider = selectedProvider,
             initialHost = host,
+            onExpired = {
+                session = null
+                errorMessage = "Phone setup link expired after 5 minutes. Close and reopen this window to generate a new link."
+            },
             onSubmission = {
                 submissionReceived = true
                 onApplySubmission(it)
@@ -428,9 +435,18 @@ private fun PhoneSetupDialog(
         }
     }
 
+    LaunchedEffect(session?.expiresAtElapsedRealtimeMs) {
+        while (session != null) {
+            nowElapsedRealtimeMs = android.os.SystemClock.elapsedRealtime()
+            delay(1_000)
+        }
+    }
+
     val qrBitmap = remember(session?.url) {
         session?.url?.let { generateQrCodeBitmap(it) }
     }
+    val secondsRemaining = session
+        ?.let { ((it.expiresAtElapsedRealtimeMs - nowElapsedRealtimeMs).coerceAtLeast(0L) / 1000L).toInt() }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -490,6 +506,14 @@ private fun PhoneSetupDialog(
                                 style = TvType.bodyMedium,
                                 color = TextMid
                             )
+                            secondsRemaining?.let {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Link expires in ${it / 60}:${(it % 60).toString().padStart(2, '0')}",
+                                    style = TvType.bodyMedium,
+                                    color = TextMid
+                                )
+                            }
                             Spacer(Modifier.height(18.dp))
                             Text("How it works", style = TvType.titleMedium, color = TextHi)
                             Spacer(Modifier.height(8.dp))

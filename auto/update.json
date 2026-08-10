@@ -1,8 +1,8 @@
 {
-  "versionCode": 26,
-  "versionName": "4.26 Stable Edition",
+  "versionCode": 27,
+  "versionName": "4.27 Stability Sweep",
   "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
-  "releaseNotes": "Stable edition hardening: protects startup from corrupted local Room/DataStore reads, prevents crash-restart recovery from throwing exact-alarm errors, keeps each provider DNS/server URL authoritative instead of applying a broken global DNS override, hardens Phone / QR setup with a one-time tokenized pairing URL, and tightens TV focus restoration after dialogs/text-field Back. Update is mandatory and appears on app open.",
+  "releaseNotes": "Stability sweep: fixes minSdk 24 API traps in picture-in-picture and QR token generation, gives Phone / QR setup a 5-minute expiring one-time pairing link, makes boot autostart fail closed if local state is corrupt, requires SHA-256 verified updates, narrows update FileProvider exposure to the updates folder, disables TV backup for credential/state safety, and clears TV lint errors. Mandatory because the updater is now less trusting, which is annoying but healthier.",
   "mandatory": true,
-  "sha256": "66fb45d964d19d819690ca8fde0bf07b5a08eec13510ea02de35b04d0f0057bf"
+  "sha256": "97cdfdd87dcaa838434b354e668da8c437c5b2638a238043009dd584d719fbfb"
 }

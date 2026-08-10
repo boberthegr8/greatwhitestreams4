@@ -12,9 +12,11 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             val appContext = context.applicationContext
             val shouldLaunch = runBlocking {
-                val settings = SettingsRepository(appContext).load()
-                val creds = TvCredentialStore(appContext).load()
-                settings.cableBoxMode && creds != null
+                runCatching {
+                    val settings = SettingsRepository(appContext).load()
+                    val creds = TvCredentialStore(appContext).load()
+                    settings.cableBoxMode && creds != null
+                }.getOrElse { false }
             }
             if (shouldLaunch) {
                 val launchIntent = Intent(context, TvActivity::class.java).apply {
