@@ -1,8 +1,8 @@
 {
-  "versionCode": 18,
-  "versionName": "4.18",
-  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.18-foundation-room.apk",
-  "releaseNotes": "Stability foundation release: adds migration-safe Room user-state database, moves Live TV favorites/recents/last-channel foundation onto Room while preserving existing DataStore data, fixes Android cache storage, cleans boot/cable-box mode handling, and preserves the GitHub self-updater.",
+  "versionCode": 19,
+  "versionName": "4.19",
+  "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-v4.19-live-favorites-recents.apk",
+  "releaseNotes": "Adds Live TV Favorites and Recently Watched categories backed by the new Room user-state database, shows favorite stars in the guide, and adds a D-pad-safe Favorite/Unfavorite control in the player OSD. Preserves previous-channel row, updater compatibility, and existing data migration.",
   "mandatory": false,
-  "sha256": "fc3c7e290f782d1d8bbf1a9a64b6e52cbc35eaae9e3a896b3b6025217b38dc67"
+  "sha256": "5ed944aabab3d6e7904d237b163f1e11b61fb59e80d89d7435398b846bcbfb77"
 }
