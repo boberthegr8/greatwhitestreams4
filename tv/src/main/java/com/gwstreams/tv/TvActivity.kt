@@ -113,6 +113,9 @@ class TvActivity : ComponentActivity() {
                         }
 
                         val currentScreen = screen
+                        LaunchedEffect(Unit) {
+                            vm.checkForAppUpdate()
+                        }
                         LaunchedEffect(currentScreen) {
                             val isLive = currentScreen is TvScreen.Player && currentScreen.item.section == TvSection.LIVE
                             isLivePlayerMode = isLive
@@ -125,8 +128,8 @@ class TvActivity : ComponentActivity() {
                             }
                         }
 
-                        LaunchedEffect(state.loggedIn) {
-                            if (state.loggedIn && screen is TvScreen.Login) {
+                        LaunchedEffect(state.loggedIn, state.appUpdate.isDialogVisible) {
+                            if (state.loggedIn && screen is TvScreen.Login && !state.appUpdate.isDialogVisible) {
                                 screen = if (state.settings.cableBoxMode && state.items.isNotEmpty()) {
                                     val lastChannel = state.items.find { it.id == state.lastPlayedChannelId } ?: state.items.first()
                                     playerReturnScreen = TvScreen.Browse
@@ -157,7 +160,7 @@ class TvActivity : ComponentActivity() {
                                 TvScreen.Login -> {
                                     TvLoginScreen(
                                         vm = vm,
-                                        onLoggedIn = { screen = TvScreen.Browse }
+                                        onLoggedIn = { }
                                     )
                                 }
 
