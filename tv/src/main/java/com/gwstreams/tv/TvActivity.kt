@@ -278,11 +278,34 @@ class TvActivity : ComponentActivity() {
             android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
         )
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
-        alarmManager?.setExact(
-            android.app.AlarmManager.RTC,
-            System.currentTimeMillis() + 500,
-            pendingIntent
-        )
+        val triggerAtMillis = System.currentTimeMillis() + 500
+        try {
+            alarmManager?.setExact(
+                android.app.AlarmManager.RTC,
+                triggerAtMillis,
+                pendingIntent
+            )
+        } catch (securityException: SecurityException) {
+            try {
+                alarmManager?.set(
+                    android.app.AlarmManager.RTC,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            } catch (_: Exception) {
+                // Never crash the crash handler while attempting a best-effort restart.
+            }
+        } catch (_: Exception) {
+            try {
+                alarmManager?.set(
+                    android.app.AlarmManager.RTC,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            } catch (_: Exception) {
+                // Never crash the crash handler while attempting a best-effort restart.
+            }
+        }
     }
 
     override fun onTrimMemory(level: Int) {

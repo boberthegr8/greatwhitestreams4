@@ -98,6 +98,7 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
     var showPhoneSetupDialog by remember { mutableStateOf(false) }
     var restoredSavedProvider by remember { mutableStateOf(false) }
     var phoneSetupStatus by remember { mutableStateOf<String?>(null) }
+    var pendingFocusRestore by remember { mutableStateOf<FocusRequester?>(null) }
 
     val providerRequester = remember { FocusRequester() }
     val hostRequester = remember { FocusRequester() }
@@ -147,6 +148,14 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
     LaunchedEffect(state.autoLoggingIn, visibleUpdate != null) {
         if (!state.autoLoggingIn && visibleUpdate == null) {
             providerRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(pendingFocusRestore) {
+        pendingFocusRestore?.let { requester ->
+            kotlinx.coroutines.delay(DialogFocusDelayMs)
+            requester.requestFocus()
+            pendingFocusRestore = null
         }
     }
 
@@ -309,7 +318,10 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
         if (showProviderDialog) {
             ProviderDialog(
                 selectedProvider = selectedProvider,
-                onDismiss = { showProviderDialog = false },
+                onDismiss = {
+                    showProviderDialog = false
+                    pendingFocusRestore = providerRequester
+                },
                 onSelect = { provider ->
                     selectedProvider = provider
                     hostInput = when {
@@ -317,7 +329,7 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                         else -> provider.defaultHost
                     }
                     showProviderDialog = false
-                    hostRequester.requestFocus()
+                    pendingFocusRestore = hostRequester
                 }
             )
         }
@@ -335,11 +347,13 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                     val providerFromHost = Provider.entries.firstOrNull {
                         !it.showHostField && it.defaultHost.equals(submission.host, ignoreCase = true)
                     }
-                    selectedProvider = providerFromSubmission ?: providerFromHost ?: Provider.CUSTOM
+                    val providerToUse = providerFromSubmission ?: providerFromHost ?: Provider.CUSTOM
+                    selectedProvider = providerToUse
                     hostInput = submission.host
                     user = submission.user
                     pass = submission.pass
                     saveLogin = submission.saveLogin
+                    pendingFocusRestore = if (submission.autoSubmit) null else signInRequester
                     phoneSetupStatus = if (submission.autoSubmit) {
                         "Phone submitted credentials. Signing in…"
                     } else {
@@ -353,10 +367,10 @@ fun TvLoginScreen(vm: TvViewModel, onLoggedIn: () -> Unit) {
                             user = submission.user.trim(),
                             pass = submission.pass,
                             remember = submission.saveLogin,
-                            provider = selectedProvider.name
+                            provider = providerToUse.name
                         ) { ok, _ -> if (ok) onLoggedIn() }
                     } else {
-                        signInRequester.requestFocus()
+                        pendingFocusRestore = signInRequester
                     }
                 }
             )
@@ -811,8 +825,10 @@ private fun TvField(
                         }
                     }
                     Key.Back -> {
-                        focusManager.clearFocus(force = true)
-                        false
+                        focusManager.moveFocus(FocusDirection.Up) || run {
+                            upRequester.requestFocus()
+                            true
+                        }
                     }
                     else -> false
                 }

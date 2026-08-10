@@ -103,15 +103,19 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             _state.value = _state.value.copy(
-                settings = settingsRepo.load(),
-                lastPlayedChannelId = userStateRepo.lastPlayedChannelId(),
-                lastCrashSummary = CrashReporter.readLastCrashSummary(app)
+                settings = loadSettingsSafely(),
+                lastPlayedChannelId = loadLastPlayedChannelIdSafely(),
+                lastCrashSummary = readLastCrashSummarySafely(app)
             )
             refreshUserState()
 
             // Surface any saved credentials so the login screen can prefill,
             // and attempt a silent auto-login so the app stays signed in.
-            creds.load()?.let { c ->
+            runCatching { creds.load() }
+                .onFailure { error ->
+                    Log.w(TAG, "Unable to load saved TV credentials for auto-login; continuing without them", error)
+                }
+                .getOrNull()?.let { c ->
                 _state.value = _state.value.copy(
                     savedHost = c.host,
                     savedUser = c.user,
@@ -126,8 +130,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     private fun attemptAutoLogin(c: com.gwstreams.tv.data.TvCredentialStore.Creds) {
         _state.value = _state.value.copy(autoLoggingIn = true)
         viewModelScope.launch {
-            // Pre-boot fetch for Master DNS + Maintenance
-            val dnsHost = DnsBootstrapper.fetchLatestPortalHost(c.host)
+            // Provider-aware bootstrap overrides only; otherwise keep the saved host.
+            val dnsHost = DnsBootstrapper.fetchLatestPortalHost(c.provider)
             if (dnsHost == "MAINTENANCE_MODE_ACTIVE") {
                 _state.value = _state.value.copy(
                     autoLoggingIn = false,
@@ -277,8 +281,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     ) {
         _state.value = _state.value.copy(loading = true, error = null)
         viewModelScope.launch {
-            // Check killswitch on manual login too
-            val dnsHost = DnsBootstrapper.fetchLatestPortalHost(host)
+            // Manual/preset host entry stays authoritative unless a provider-aware feed exists.
+            val dnsHost = DnsBootstrapper.fetchLatestPortalHost(provider)
             if (dnsHost == "MAINTENANCE_MODE_ACTIVE") {
                 _state.value = _state.value.copy(loading = false, error = "Provider Maintenance. Service will return shortly.")
                 onResult(false, "Maintenance Mode")
@@ -531,8 +535,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     fun loadCrashDetails() {
         val app = getApplication<Application>()
         _state.value = _state.value.copy(
-            lastCrashSummary = CrashReporter.readLastCrashSummary(app),
-            lastCrashDetails = CrashReporter.readLastCrashDetails(app)
+            lastCrashSummary = readLastCrashSummarySafely(app),
+            lastCrashDetails = readLastCrashDetailsSafely(app)
         )
     }
 
@@ -769,11 +773,51 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun refreshUserState() {
+        val favorites = runCatching { userStateRepo.favorites() }
+            .onFailure { error ->
+                Log.w(TAG, "Unable to load favorites from local user state; using empty set", error)
+            }
+            .getOrElse { emptySet() }
+        val recentChannelIds = runCatching { userStateRepo.recentChannels() }
+            .onFailure { error ->
+                Log.w(TAG, "Unable to load recent channels from local user state; using empty list", error)
+            }
+            .getOrElse { emptyList() }
         _state.value = _state.value.copy(
-            favorites = userStateRepo.favorites(),
-            recentChannelIds = userStateRepo.recentChannels()
+            favorites = favorites,
+            recentChannelIds = recentChannelIds
         )
     }
+
+    private suspend fun loadSettingsSafely(): AppSettings =
+        try {
+            settingsRepo.load()
+        } catch (error: Throwable) {
+            Log.w(TAG, "Unable to load app settings; using defaults", error)
+            AppSettings()
+        }
+
+    private suspend fun loadLastPlayedChannelIdSafely(): Int? =
+        try {
+            userStateRepo.lastPlayedChannelId()
+        } catch (error: Throwable) {
+            Log.w(TAG, "Unable to load last played channel id; continuing without it", error)
+            null
+        }
+
+    private fun readLastCrashSummarySafely(app: Application): CrashReporter.CrashSummary? =
+        runCatching { CrashReporter.readLastCrashSummary(app) }
+            .onFailure { error ->
+                Log.w(TAG, "Unable to read last crash summary; continuing without it", error)
+            }
+            .getOrNull()
+
+    private fun readLastCrashDetailsSafely(app: Application): String? =
+        runCatching { CrashReporter.readLastCrashDetails(app) }
+            .onFailure { error ->
+                Log.w(TAG, "Unable to read last crash details; continuing without them", error)
+            }
+            .getOrNull()
 
     private fun applyLiveFilters(items: List<TvContentItem>): List<TvContentItem> {
         if (!_state.value.settings.momMode) return items

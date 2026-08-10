@@ -6,8 +6,9 @@ import fi.iki.elonen.NanoHTTPD
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.SocketException
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
+import java.security.SecureRandom
+import java.util.Base64
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal data class PhoneSetupSubmission(
     val providerName: String?,
@@ -32,6 +33,7 @@ internal class PhoneSetupServer(
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var server: SetupHttpServer? = null
+    private val secureRandom = SecureRandom()
 
     fun start(): Result<PhoneSetupSession> {
         stop()
@@ -42,12 +44,13 @@ internal class PhoneSetupServer(
         var lastError: Throwable? = null
         for (port in ports) {
             try {
-                val candidate = SetupHttpServer(port)
+                val token = generateSessionToken()
+                val candidate = SetupHttpServer(port = port, token = token)
                 candidate.start(SOCKET_READ_TIMEOUT, false)
                 server = candidate
                 return Result.success(
                     PhoneSetupSession(
-                        url = "http://$hostAddress:${candidate.listeningPort}/",
+                        url = "http://$hostAddress:${candidate.listeningPort}${candidate.pairPath}",
                         hostAddress = hostAddress,
                         port = candidate.listeningPort
                     )
@@ -65,10 +68,22 @@ internal class PhoneSetupServer(
         server = null
     }
 
-    private inner class SetupHttpServer(port: Int) : NanoHTTPD(port) {
+    private inner class SetupHttpServer(
+        port: Int,
+        private val token: String
+    ) : NanoHTTPD(port) {
+        val pairPath: String = "/pair/$token"
+        private val submissionConsumed = AtomicBoolean(false)
+
         override fun serve(session: IHTTPSession): Response {
+            if (session.uri != pairPath) {
+                return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+            }
+            if (submissionConsumed.get()) {
+                return newFixedLengthResponse(Response.Status.GONE, MIME_PLAINTEXT, "This setup link has already been used.")
+            }
             return when (session.method) {
-                Method.GET -> newFixedLengthResponse(Response.Status.OK, MIME_HTML, buildSetupPage())
+                Method.GET -> newFixedLengthResponse(Response.Status.OK, MIME_HTML, buildSetupPage(formAction = pairPath))
                 Method.POST -> handleSubmit(session)
                 else -> newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method not allowed")
             }
@@ -88,21 +103,32 @@ internal class PhoneSetupServer(
                     autoSubmit = params.containsKey("autoSubmit")
                 )
                 if (submission.host.isBlank() || submission.user.isBlank() || submission.pass.isBlank()) {
-                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_HTML, buildSetupPage("Please fill every field before submitting."))
+                    return newFixedLengthResponse(
+                        Response.Status.BAD_REQUEST,
+                        MIME_HTML,
+                        buildSetupPage(formAction = pairPath, errorMessage = "Please fill every field before submitting.")
+                    )
+                }
+                if (!submissionConsumed.compareAndSet(false, true)) {
+                    return newFixedLengthResponse(Response.Status.GONE, MIME_PLAINTEXT, "This setup link has already been used.")
                 }
                 mainHandler.post { onSubmission(submission) }
+                mainHandler.post { this@PhoneSetupServer.stop() }
                 newFixedLengthResponse(Response.Status.OK, MIME_HTML, buildSuccessPage())
             } catch (error: Throwable) {
                 newFixedLengthResponse(
                     Response.Status.INTERNAL_ERROR,
                     MIME_HTML,
-                    buildSetupPage("Submit failed: ${htmlEscape(error.message ?: "unknown error")}")
+                    buildSetupPage(formAction = pairPath, errorMessage = "Submit failed. Close this page and try again from the TV.")
                 )
             }
         }
     }
 
-    private fun buildSetupPage(errorMessage: String? = null): String {
+    private fun buildSetupPage(
+        formAction: String,
+        errorMessage: String? = null
+    ): String {
         val providerOptions = providers.joinToString(separator = "") { provider ->
             val selected = if (provider == selectedProvider) " selected" else ""
             "<option value=\"${provider.name}\"$selected>${htmlEscape(provider.displayName)}</option>"
@@ -135,7 +161,7 @@ internal class PhoneSetupServer(
                 <h1>Great White Streams TV setup</h1>
                 <p>Send the TV your DNS/server URL, username, and password from this phone. You can either fill the TV login fields or have the TV try the login immediately.</p>
                 ${errorMessage?.let { "<div class=\"error\">$it</div>" } ?: ""}
-                <form method="post" action="/">
+                <form method="post" action="${htmlAttribute(formAction)}">
                   <label for="provider">Provider preset</label>
                   <select id="provider" name="provider">$providerOptions</select>
 
@@ -202,6 +228,12 @@ internal class PhoneSetupServer(
     }
 
     private fun htmlAttribute(value: String): String = htmlEscape(value)
+
+    private fun generateSessionToken(): String {
+        val bytes = ByteArray(18)
+        secureRandom.nextBytes(bytes)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    }
 
     private fun findLocalIpv4Address(): String? {
         return try {
