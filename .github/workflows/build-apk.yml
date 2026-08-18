@@ -33,25 +33,15 @@ jobs:
       - name: Grant execute permission to Gradle
         run: chmod +x gradlew
 
-      - name: Verify signing secrets
+      - name: Restore permanent signing bundle
         env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          GWS_SIGNING_BUNDLE: ${{ secrets.GWS_SIGNING_BUNDLE }}
         run: |
-          test -n "$RELEASE_KEYSTORE_BASE64" || (echo "Missing RELEASE_KEYSTORE_BASE64" && exit 1)
-          test -n "$RELEASE_STORE_PASSWORD" || (echo "Missing RELEASE_STORE_PASSWORD" && exit 1)
-          test -n "$RELEASE_KEY_ALIAS" || (echo "Missing RELEASE_KEY_ALIAS" && exit 1)
-          test -n "$RELEASE_KEY_PASSWORD" || (echo "Missing RELEASE_KEY_PASSWORD" && exit 1)
-
-      - name: Restore permanent release keystore
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          mkdir -p signing
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > signing/greatwhite-release.jks
+          test -n "$GWS_SIGNING_BUNDLE" || (echo "Missing GWS_SIGNING_BUNDLE repository secret" && exit 1)
+          printf '%s' "$GWS_SIGNING_BUNDLE" | base64 --decode > /tmp/gws-signing.zip
+          unzip -q /tmp/gws-signing.zip -d .
           test -s signing/greatwhite-release.jks
+          test -s signing.properties
 
       - name: Set release version
         run: |
@@ -59,11 +49,6 @@ jobs:
           echo "VERSION_NAME=5.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
 
       - name: Build permanently signed TV release APK
-        env:
-          RELEASE_STORE_FILE: signing/greatwhite-release.jks
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew :tv:assembleRelease
 
       - name: Verify APK exists and is signed
@@ -99,7 +84,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add auto/greatwhite-latest.apk auto/update.json
+          git add -f auto/greatwhite-latest.apk auto/update.json
           if git diff --cached --quiet; then
             echo "No update files changed."
             exit 0
