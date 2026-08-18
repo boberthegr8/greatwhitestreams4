@@ -24,6 +24,10 @@ val hasReleaseSigning = listOf(
     "RELEASE_KEY_PASSWORD"
 ).all { signingValue(it) != null }
 
+// CI supplies these for permanent signed releases. Local/manual builds keep the current fallback version.
+val ciVersionCode = System.getenv("VERSION_CODE")?.toIntOrNull()
+val ciVersionName = System.getenv("VERSION_NAME")?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.gwstreams.tv"
     compileSdk = 34
@@ -32,14 +36,13 @@ android {
         applicationId = "com.local.media.viewer.v4"
         minSdk = 24
         targetSdk = 34
-        versionCode = 29
-        versionName = "4.29"
+        versionCode = ciVersionCode ?: 29
+        versionName = ciVersionName ?: "4.29"
         vectorDrawables { useSupportLibrary = true }
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a") // Idea 33: Cut APK size by 40% (No x86 bloat)
         }
     }
-
 
     signingConfigs {
         if (hasReleaseSigning) {
