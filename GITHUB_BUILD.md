@@ -1,38 +1,21 @@
 # Building Great White Streams on GitHub
 
-Builds two APKs in the cloud — one for phones, one for Android TV / Fire TV.
+Great White Streams TV now uses a permanent release-signing key and an automatic in-app update pipeline.
 
-## Upload
-1. Sign in to GitHub.
-2. Create a new repository (e.g. `greatwhitestreams`).
-3. Upload the **contents** of this folder so `app/`, `tv/`, `gradlew`,
-   `build.gradle.kts`, and the hidden `.github/` folder all sit at the repo root.
-   (Pushing with git from the command line is the most reliable way to include
-   the hidden `.github` folder.)
-4. Commit.
+## Permanent first install
 
-## Get the APKs
-1. Go to the **Actions** tab — the build starts automatically (~6-8 min for both).
-2. When it goes green, open the run and scroll to **Artifacts**:
-   - **GreatWhiteStreams-phone-apk** → `app-debug.apk` for phones
-   - **GreatWhiteStreams-tv-apk** → `tv-debug.apk` for Android TV / Fire TV
-3. Download whichever you need.
+Do not distribute or install a debug APK as the long-term baseline. The first customer/test installation should be the signed TV release produced by the `Build & Publish Great White TV` GitHub Action.
 
-## Installing the TV APK on Fire TV / Android TV
-The TV APK won't sideload by tapping like on a phone. Easiest routes:
-- **Downloader app** (Fire TV / Android TV): install "Downloader" from the store,
-  then point it at a direct link to the APK (e.g. upload `tv-debug.apk` to your
-  own cloud and use the share link), or
-- **adb**: `adb connect <tv-ip>` then `adb install tv-debug.apk` from a computer
-  on the same network (enable Developer Options + ADB debugging on the TV first).
+The repository must contain the Actions secret `GWS_SIGNING_BUNDLE`. The workflow restores the permanent keystore from that secret, builds `:tv:assembleRelease`, verifies the APK signature, uploads the signed APK as a GitHub Actions artifact, and publishes the same APK to `auto/greatwhite-latest.apk`.
 
-The TV app appears in the Android TV / Fire TV launcher row once installed.
+## Automatic updates
 
-## Notes
-- Both apps share the same login and stream code, so what works on the phone
-  works on the TV.
-- TV navigation is D-pad / remote based: Up/Down/Left/Right to move focus,
-  center to select, Back to go back. Live uses a TiviMate-style layout
-  (sections + search + categories on the left, scrolling guide on the right).
-- TV Settings: toggle EPG auto-fetch, EPG refresh interval, buffer size, and
-  hide/show live categories.
+Every qualifying push to `main` creates a new release version with a higher `versionCode`. The workflow computes the APK SHA-256 and rewrites `auto/update.json`. Installed TV copies check that feed and can download and install the newer APK over the existing installation.
+
+For an Android in-place update to work, the package/application ID and signing key must remain unchanged. Never replace or regenerate the permanent Great White Streams release keystore after devices have been deployed.
+
+## Installing the TV APK
+
+Download the signed `GreatWhiteStreams-TV-*` artifact from the successful GitHub Action and sideload that APK onto Android TV / Google TV / Fire TV. This signed release is the permanent update baseline.
+
+After installation, allow Great White Streams to install unknown apps when Android requests that permission. Future signed releases should then install over the existing app while preserving its app data.
