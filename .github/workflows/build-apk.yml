@@ -26,6 +26,24 @@ jobs:
         id: checkout
         uses: actions/checkout@v4
 
+      - name: Publish run-start marker
+        id: started
+        run: |
+          mkdir -p auto
+          cat > auto/build-status.json <<EOF
+          {
+            "status": "started",
+            "runId": "${GITHUB_RUN_ID}",
+            "runNumber": ${GITHUB_RUN_NUMBER},
+            "commit": "${GITHUB_SHA}"
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f auto/build-status.json
+          git commit -m "Record Great White TV build start [skip ci]"
+          git push
+
       - name: Set up JDK 17
         id: java
         uses: actions/setup-java@v4
@@ -109,6 +127,7 @@ jobs:
         if: always()
         env:
           CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          STARTED_OUTCOME: ${{ steps.started.outcome }}
           JAVA_OUTCOME: ${{ steps.java.outcome }}
           SIGNING_OUTCOME: ${{ steps.signing.outcome }}
           VERSION_OUTCOME: ${{ steps.version.outcome }}
@@ -121,10 +140,12 @@ jobs:
           mkdir -p auto
           cat > auto/build-status.json <<EOF
           {
+            "status": "finished",
             "runId": "${GITHUB_RUN_ID}",
             "runNumber": ${GITHUB_RUN_NUMBER},
             "commit": "${GITHUB_SHA}",
             "checkout": "${CHECKOUT_OUTCOME}",
+            "started": "${STARTED_OUTCOME}",
             "java": "${JAVA_OUTCOME}",
             "signing": "${SIGNING_OUTCOME}",
             "version": "${VERSION_OUTCOME}",
@@ -138,9 +159,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f auto/build-status.json
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "Record Great White TV build status [skip ci]"
+          git commit -m "Record Great White TV build status [skip ci]" || exit 0
           git pull --rebase origin main || true
           git push
