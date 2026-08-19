@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - "auto/greatwhite-latest.apk"
       - "auto/update.json"
+      - "auto/build-status.json"
   workflow_dispatch:
 
 permissions:
@@ -13,17 +14,20 @@ permissions:
 
 concurrency:
   group: great-white-tv-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
+        id: java
         uses: actions/setup-java@v4
         with:
           distribution: zulu
@@ -31,9 +35,11 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission to Gradle
+        id: gradle-permission
         run: chmod +x gradlew
 
       - name: Restore permanent signing bundle
+        id: signing
         env:
           GWS_SIGNING_BUNDLE: ${{ secrets.GWS_SIGNING_BUNDLE }}
         run: |
@@ -44,20 +50,25 @@ jobs:
           test -s signing.properties
 
       - name: Set release version
+        id: version
         run: |
           echo "VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
           echo "VERSION_NAME=5.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
 
       - name: Build permanently signed TV release APK
-        run: ./gradlew :tv:assembleRelease
+        id: build
+        run: ./gradlew :tv:assembleRelease --stacktrace
 
       - name: Verify APK exists and is signed
+        id: verify
         run: |
           APK="tv/build/outputs/apk/release/tv-release.apk"
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --verbose --print-certs "$APK"
+          APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
 
       - name: Prepare in-app update package
+        id: prepare
         run: |
           APK="tv/build/outputs/apk/release/tv-release.apk"
           cp "$APK" auto/greatwhite-latest.apk
@@ -74,6 +85,7 @@ jobs:
           EOF
 
       - name: Upload signed APK artifact
+        id: artifact
         uses: actions/upload-artifact@v4
         with:
           name: GreatWhiteStreams-TV-${{ env.VERSION_NAME }}
@@ -81,13 +93,54 @@ jobs:
           if-no-files-found: error
 
       - name: Publish latest APK and update metadata
+        id: publish
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f auto/greatwhite-latest.apk auto/update.json
           if git diff --cached --quiet; then
             echo "No update files changed."
+          else
+            git commit -m "Publish Great White TV ${VERSION_NAME} [skip ci]"
+            git push
+          fi
+
+      - name: Publish build diagnostic
+        if: always()
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          JAVA_OUTCOME: ${{ steps.java.outcome }}
+          SIGNING_OUTCOME: ${{ steps.signing.outcome }}
+          VERSION_OUTCOME: ${{ steps.version.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          PREPARE_OUTCOME: ${{ steps.prepare.outcome }}
+          ARTIFACT_OUTCOME: ${{ steps.artifact.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          mkdir -p auto
+          cat > auto/build-status.json <<EOF
+          {
+            "runId": "${GITHUB_RUN_ID}",
+            "runNumber": ${GITHUB_RUN_NUMBER},
+            "commit": "${GITHUB_SHA}",
+            "checkout": "${CHECKOUT_OUTCOME}",
+            "java": "${JAVA_OUTCOME}",
+            "signing": "${SIGNING_OUTCOME}",
+            "version": "${VERSION_OUTCOME}",
+            "build": "${BUILD_OUTCOME}",
+            "verify": "${VERIFY_OUTCOME}",
+            "prepare": "${PREPARE_OUTCOME}",
+            "artifact": "${ARTIFACT_OUTCOME}",
+            "publish": "${PUBLISH_OUTCOME}"
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f auto/build-status.json
+          if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "Publish Great White TV ${VERSION_NAME} [skip ci]"
+          git commit -m "Record Great White TV build status [skip ci]"
+          git pull --rebase origin main || true
           git push
