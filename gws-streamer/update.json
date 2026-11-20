@@ -1,8 +1,8 @@
 {
   "package_name": "com.gwstreams.player",
-  "version_code": 13,
-  "version_name": "2.8.0",
-  "apk_url": "https://github.com/boberthegr8/greatwhitestreams4/releases/download/gws-streamer-v2.8.0/GWS-Streamer-2.8.0.apk",
-  "sha256": "ae3b7e1bb1c01e96ecb9e6785e0024b0095991358138c221b9c3a70a16fc0c23",
-  "notes": "GWS Streamer 2.8.0: new Home, floating navigation, redesigned playback overlay, Free TV (experimental), manual update check."
+  "version_code": 15,
+  "version_name": "2.8.2",
+  "apk_url": "https://github.com/boberthegr8/greatwhitestreams4/releases/download/gws-streamer-v2.8.2/GWS-Streamer-2.8.2.apk",
+  "sha256": "92c65fc5f701b74fda684997f201f9555b422ff9a597ec528e0e766e7b43546b",
+  "notes": "Adds history privacy controls, Continue watching actions, bounded live recovery, previous-channel shortcut, last-good catalogue protection, recent searches, category preferences and visible-first guide/artwork. Original theme retained."
 }
