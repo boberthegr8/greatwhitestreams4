@@ -1,8 +1,8 @@
 {
   "package_name": "com.gwstreams.player",
-  "version_code": 18,
-  "version_name": "2.10.0",
-  "apk_url": "https://github.com/boberthegr8/greatwhitestreams4/releases/download/gws-streamer-v2.10.0/GWS-Streamer-2.10.0.apk",
-  "sha256": "db25bbacbbb1864660ea10860cc82f6501c4926ba42382f1342dc8a74e5806a1",
-  "notes": "GWS Streamer 2.10.0: Previous channel now lives in the playback menu directly above Channel list instead of sitting on screen. Free TV has a country menu (Canada, USA, UK) with a short curated picks list. Movies open on large-poster rows (Continue watching, Recently added, Favourites, genres) plus Browse all; posters show 4K/HD/year/progress only when the playlist supplies it. Backing out of a movie or player returns to the same poster and scroll position. Series pages show larger art, episode thumbnails and watched ticks, and the big button says Resume Sx Ex. Update install now continues automatically after you allow unknown sources."
+  "version_code": 19,
+  "version_name": "2.10.1",
+  "apk_url": "https://github.com/boberthegr8/greatwhitestreams4/releases/download/gws-streamer-v2.10.1/GWS-Streamer-2.10.1.apk",
+  "sha256": "8eec4f15c7db1192d3e7455437a157b5616e2e5cc3e4c45d5dcda5b7c63a52c3",
+  "notes": "Movies now has a Recently Added category directly below Home. Browse the full movie poster grid with provider addition dates newest first; the Home preview uses the same order. Movies without addition dates appear after dated movies in approximate provider-ID order. Existing large posters, colours and remote focus restoration are retained. Update certificate handling now also reads Android's validated legacy certificate field when modern signing information is unavailable, while continuing to reject missing or different certificates. An older installed updater that rejects the update may need one manual installation of the official signed APK."
 }
