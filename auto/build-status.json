@@ -1,6 +1,16 @@
 {
-  "status": "started",
+  "status": "finished",
   "runId": "45196352728",
   "runNumber": 13,
-  "commit": "1e639d123a282451b2018d318f9b73229eba6d04"
+  "commit": "1e639d123a282451b2018d318f9b73229eba6d04",
+  "checkout": "success",
+  "started": "success",
+  "java": "success",
+  "signing": "success",
+  "version": "success",
+  "build": "success",
+  "verify": "success",
+  "prepare": "success",
+  "artifact": "success",
+  "publish": "success"
 }
