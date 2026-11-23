@@ -1,8 +1,8 @@
 {
   "package_name": "com.gwstreams.player",
-  "version_code": 19,
-  "version_name": "2.10.1",
-  "apk_url": "https://github.com/boberthegr8/greatwhitestreams4/releases/download/gws-streamer-v2.10.1/GWS-Streamer-2.10.1.apk",
-  "sha256": "8eec4f15c7db1192d3e7455437a157b5616e2e5cc3e4c45d5dcda5b7c63a52c3",
-  "notes": "Movies now has a Recently Added category directly below Home. Browse the full movie poster grid with provider addition dates newest first; the Home preview uses the same order. Movies without addition dates appear after dated movies in approximate provider-ID order. Existing large posters, colours and remote focus restoration are retained. Update certificate handling now also reads Android's validated legacy certificate field when modern signing information is unavailable, while continuing to reject missing or different certificates. An older installed updater that rejects the update may need one manual installation of the official signed APK."
+  "version_code": 20,
+  "version_name": "2.11.0",
+  "apk_url": "https://github.com/boberthegr8/greatwhitestreams4/releases/download/gws-streamer-v2.11.0/GWS-Streamer-2.11.0.apk",
+  "sha256": "b264ad958108f3f16f50990019e5b73d6f7aafe92c1354a8e2d7fa7631b9df89",
+  "notes": "Movies: Top 10 (our picks), Classics by decade, featured movie banner, Movie Night collections, cinematic detail with More Like This. Live TV guide text slightly smaller."
 }
