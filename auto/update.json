@@ -1,8 +1,8 @@
 {
-  "versionCode": 100013,
-  "versionName": "5.13",
+  "versionCode": 100014,
+  "versionName": "5.14",
   "apkUrl": "https://raw.githubusercontent.com/boberthegr8/greatwhitestreams4/main/auto/greatwhite-latest.apk",
   "releaseNotes": "Latest Great White Streams TV update.",
   "mandatory": false,
-  "sha256": "833910725d55564dfcc457f42ca8f890bcaa64765677d99aede78117784ab0aa"
+  "sha256": "a4cfd7b3fa841123a16944608dfbfc6dd209707123a34b359165407247df7490"
 }
